@@ -18,6 +18,8 @@
 #include <cmath>
 #include <sstream>
 
+using namespace std::chrono_literals;
+
 namespace lw
 {
 HuntManager& HuntManager::Instance()
@@ -299,7 +301,7 @@ void HuntManager::Update(uint32 diff)
         {
             prey->CombatStop(true); prey->SetFlag(UNIT_FIELD_FLAGS,UNIT_FLAG_NON_ATTACKABLE|UNIT_FLAG_IMMUNE_TO_PC);
             ChatHandler(p->GetSession()).PSendSysMessage("|cffffff00[LW Hunt]|r {} breaks away and disappears. Continue tracking it.",h->Name);
-            prey->DespawnOrUnsummon(1500); r.ActivePreyGuid.Clear(); SaveRuntime(r);
+            prey->DespawnOrUnsummon(1500ms); r.ActivePreyGuid.Clear(); SaveRuntime(r);
         }
     }
 }
