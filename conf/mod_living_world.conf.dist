@@ -1,0 +1,36 @@
+# Living World
+# Shared world-event framework. Individual gameplay systems can be enabled independently.
+
+LivingWorld.Enable = 1
+LivingWorld.Playerbots.Enable = 0
+LivingWorld.Debug = 1
+
+# Optional gameplay subsystems.
+LivingWorld.Invasions.Enable = 1
+LivingWorld.Travelers.Enable = 1
+
+# Scheduler timing settings. Development defaults are intentionally short for observation/testing.
+LivingWorld.Scheduler.Enable = 1
+LivingWorld.Scheduler.CheckIntervalSeconds = 5
+LivingWorld.Scheduler.InitialDelayMinSeconds = 20
+LivingWorld.Scheduler.InitialDelayMaxSeconds = 40
+LivingWorld.Scheduler.NextDelayMinSeconds = 30
+LivingWorld.Scheduler.NextDelayMaxSeconds = 60
+
+# A value of 0 means unlimited.
+LivingWorld.Scheduler.MaxActiveGlobal = 3
+LivingWorld.Scheduler.DefaultMaxActivePerMap = 2
+LivingWorld.Scheduler.DefaultMaxActivePerResponseOrigin = 1
+
+# Dynamic overrides support any standard or custom map/response-origin ID.
+LivingWorld.Scheduler.MaxActive.Map.0 = 2
+LivingWorld.Scheduler.MaxActive.ResponseOrigin.1 = 1
+LivingWorld.Scheduler.MaxActive.ResponseOrigin.2 = 1
+
+#
+# Traveling world event daily travel window.
+# Uses the worldserver machine's local clock.
+# StartHour is inclusive; EndHour is exclusive.
+#
+LivingWorld.Travel.StartHour = 6
+LivingWorld.Travel.EndHour = 18
