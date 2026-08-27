@@ -9,6 +9,7 @@
 #include <vector>
 
 class Creature;
+class GameObject;
 class Player;
 
 namespace lw
@@ -28,6 +29,10 @@ struct HuntDefinition
     uint8 MinLevel = 10;
     uint8 MaxLevel = 80;
     uint32 PreyCreatureEntry = 0;
+    uint32 PreyLwTemplateId = 0;
+    uint32 ActivationGameObjectEntry = 0;
+    float AmbushHealthMultiplier = 4.0f;
+    float FinalHealthMultiplier = 6.0f;
     uint8 EscapeHealthPct = 50;
     uint8 AmbushCount = 2;
     bool Enabled = false;
@@ -72,6 +77,7 @@ struct HuntRuntime
     HuntState State = HuntState::None;
     ObjectGuid ActivePreyGuid;
     bool ActivePreyFinal = false;
+    ObjectGuid FinalActivatorGuid;
 };
 
 class HuntManager
@@ -97,6 +103,7 @@ public:
     bool AbandonHunt(Player* player, std::string& message);
     bool TurnInHunt(Player* player, Creature* giver, std::string& message);
     void OnCreatureKill(Player* player, Creature* killed);
+    bool OnFinalActivatorUsed(Player* player, GameObject* gameObject, std::string& message);
 
     bool AddProgress(Player* player, uint8 amount, std::string& message);
     bool ForceAmbush(Player* player, std::string& message);
@@ -114,6 +121,10 @@ private:
     HuntZoneDefinition const* SelectZone(HuntDefinition const& hunt, uint8 playerLevel) const;
     HuntFinalLocationDefinition const* SelectFinalLocation(HuntRuntime const& runtime) const;
     bool SpawnPrey(Player* player, HuntRuntime& runtime, bool finalEncounter, std::string& message);
+    uint32 ResolvePreyEntry(HuntDefinition const& hunt) const;
+    HuntFinalLocationDefinition const* GetFinalLocation(uint32 finalLocationId) const;
+    bool EnsureFinalActivator(Player* player, HuntRuntime& runtime);
+    void RemoveFinalActivator(Player* player, HuntRuntime& runtime);
     void LocateFinal(Player* player, HuntRuntime& runtime);
     uint8 GetNextAmbushThreshold(HuntRuntime const& runtime, HuntDefinition const& hunt) const;
 

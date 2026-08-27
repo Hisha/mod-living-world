@@ -3,6 +3,8 @@
 #include "Chat.h"
 #include "Creature.h"
 #include "CreatureScript.h"
+#include "GameObject.h"
+#include "GameObjectScript.h"
 #include "Player.h"
 #include "PlayerScript.h"
 #include "ScriptedGossip.h"
@@ -71,6 +73,23 @@ public:
     }
 };
 
+
+class LivingWorldHuntActivationScript final : public GameObjectScript
+{
+public:
+    LivingWorldHuntActivationScript() : GameObjectScript("lw_hunt_activation") { }
+
+    bool OnGossipHello(Player* player, GameObject* gameObject) override
+    {
+        std::string message;
+        bool const handled = sHuntMgr.OnFinalActivatorUsed(player, gameObject, message);
+        if (!message.empty())
+            ChatHandler(player->GetSession()).PSendSysMessage("|cff33ccff[LW Hunt]|r {}", message);
+        (void)handled;
+        return true; // swallow normal GO behavior for the LW activation marker
+    }
+};
+
 class LivingWorldHuntPlayerScript final : public PlayerScript
 {
 public:
@@ -94,5 +113,6 @@ public:
 void AddLivingWorldHuntScripts()
 {
     new LivingWorldHuntmasterScript();
+    new LivingWorldHuntActivationScript();
     new LivingWorldHuntPlayerScript();
 }
