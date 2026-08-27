@@ -11,6 +11,7 @@
 #include "CreatureAbilityManager.h"
 #include "RuntimeSignalManager.h"
 #include "TravelingEventManager.h"
+#include "HuntManager.h"
 
 #include "ConfigValueCache.h"
 #include "Creature.h"
@@ -562,6 +563,9 @@ enum class LwConfig
     Debug,
     InvasionsEnabled,
     TravelersEnabled,
+    HuntsEnabled,
+    HuntsMinimumLevel,
+    HuntsXpMultiplier,
     TravelStartHour,
     TravelEndHour,
     SchedulerEnabled,
@@ -588,6 +592,9 @@ public:
         SetConfigValue<bool>(LwConfig::Debug, "LivingWorld.Debug", false);
         SetConfigValue<bool>(LwConfig::InvasionsEnabled, "LivingWorld.Invasions.Enable", true);
         SetConfigValue<bool>(LwConfig::TravelersEnabled, "LivingWorld.Travelers.Enable", true);
+        SetConfigValue<bool>(LwConfig::HuntsEnabled, "LivingWorld.Hunts.Enable", true);
+        SetConfigValue<uint32>(LwConfig::HuntsMinimumLevel, "LivingWorld.Hunts.MinimumLevel", 10);
+        SetConfigValue<float>(LwConfig::HuntsXpMultiplier, "LivingWorld.Hunts.XPMultiplier", 0.75f);
         SetConfigValue<uint32>(LwConfig::TravelStartHour, "LivingWorld.Travel.StartHour", 6);
         SetConfigValue<uint32>(LwConfig::TravelEndHour, "LivingWorld.Travel.EndHour", 18);
         SetConfigValue<bool>(LwConfig::SchedulerEnabled, "LivingWorld.Scheduler.Enable", true);
@@ -623,6 +630,7 @@ public:
             sInvasionRuntimeMgr.Reset();
             sInvasionScheduler.Reset();
             sTravelingEventMgr.Reset();
+            sHuntMgr.Reset();
             sLwCalendarMgr.Reset();
             return;
         }
@@ -656,6 +664,16 @@ public:
         {
             sTravelingEventMgr.Reset();
         }
+
+        sHuntMgr.Configure(
+            livingWorldConfig.GetConfigValue<bool>(LwConfig::HuntsEnabled),
+            static_cast<uint8>(livingWorldConfig.GetConfigValue<uint32>(LwConfig::HuntsMinimumLevel)),
+            livingWorldConfig.GetConfigValue<float>(LwConfig::HuntsXpMultiplier),
+            livingWorldConfig.GetConfigValue<bool>(LwConfig::Debug));
+        if (livingWorldConfig.GetConfigValue<bool>(LwConfig::HuntsEnabled))
+            sHuntMgr.LoadDefinitions();
+        else
+            sHuntMgr.Reset();
 
         sLwCalendarMgr.ConfigureSubsystems(
             livingWorldConfig.GetConfigValue<bool>(LwConfig::InvasionsEnabled),
@@ -692,6 +710,8 @@ public:
             sInvasionRuntimeMgr.Initialize();
         }
         sLwCalendarMgr.Initialize();
+        if (livingWorldConfig.GetConfigValue<bool>(LwConfig::HuntsEnabled))
+            sHuntMgr.Initialize();
 
         // Persistent traveling events opt into startup independently.
         // Calendar-controlled events should keep auto_start=0.
@@ -705,6 +725,8 @@ public:
             sInvasionRuntimeMgr.Update(diff);
         if (livingWorldConfig.GetConfigValue<bool>(LwConfig::TravelersEnabled))
             sTravelingEventMgr.Update(diff);
+        if (livingWorldConfig.GetConfigValue<bool>(LwConfig::HuntsEnabled))
+            sHuntMgr.Update(diff);
         sLwCalendarMgr.Update(diff);
 
         if (lwCombatExclusionTimerMs > diff)
@@ -1126,6 +1148,15 @@ public:
             }
         };
 
+        static ChatCommandTable huntCommandTable =
+        {
+            { "status", HandleHuntStatusCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No },
+            { "progress", HandleHuntProgressCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No },
+            { "ambush", HandleHuntAmbushCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No },
+            { "final", HandleHuntFinalCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No },
+            { "abandon", HandleHuntAbandonCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No }
+        };
+
         static ChatCommandTable calendarCommandTable =
         {
             {
@@ -1147,6 +1178,10 @@ public:
             {
                 "calendar",
                 calendarCommandTable
+            },
+            {
+                "hunt",
+                huntCommandTable
             },
             {
                 "status",
@@ -1228,6 +1263,38 @@ public:
     }
 
 private:
+    static bool HandleHuntStatusCommand(ChatHandler* handler)
+    {
+        Player* player = GetCommandPlayer(handler);
+        handler->SendSysMessage(sHuntMgr.BuildStatus(player));
+        return true;
+    }
+
+    static bool HandleHuntProgressCommand(ChatHandler* handler, uint32 amount)
+    {
+        Player* player = GetCommandPlayer(handler); if (!player) return false;
+        std::string message; sHuntMgr.AddProgress(player, static_cast<uint8>(std::min<uint32>(amount, 100)), message);
+        handler->SendSysMessage(message); return true;
+    }
+
+    static bool HandleHuntAmbushCommand(ChatHandler* handler)
+    {
+        Player* player = GetCommandPlayer(handler); if (!player) return false;
+        std::string message; sHuntMgr.ForceAmbush(player, message); handler->SendSysMessage(message); return true;
+    }
+
+    static bool HandleHuntFinalCommand(ChatHandler* handler)
+    {
+        Player* player = GetCommandPlayer(handler); if (!player) return false;
+        std::string message; sHuntMgr.ForceFinal(player, message); handler->SendSysMessage(message); return true;
+    }
+
+    static bool HandleHuntAbandonCommand(ChatHandler* handler)
+    {
+        Player* player = GetCommandPlayer(handler); if (!player) return false;
+        std::string message; sHuntMgr.AbandonHunt(player, message); handler->SendSysMessage(message); return true;
+    }
+
     static bool HandleCalendarStatusCommand(ChatHandler* handler)
     {
         handler->SendSysMessage(sLwCalendarMgr.BuildStatusReport());
@@ -1385,6 +1452,8 @@ private:
         sInvasionScheduler.Reset();
 
         sLivingWorldDataMgr.LoadDefinitions();
+        if (livingWorldConfig.GetConfigValue<bool>(LwConfig::HuntsEnabled))
+            sHuntMgr.LoadDefinitions();
 
         // Rebuild scheduler/runtime state from the newly loaded definitions.
         // Initialize() returns the scheduler to Running when it is enabled in config.
@@ -1425,7 +1494,7 @@ private:
         }
 
         handler->SendSysMessage("Living World");
-        handler->SendSysMessage("Version: 0.3.0-dev");
+        handler->SendSysMessage("Version: 0.4.0-dev");
         handler->PSendSysMessage("Scheduler: {}", schedulerState);
         handler->PSendSysMessage("Debug: {}", livingWorldConfig.GetConfigValue<bool>(LwConfig::Debug) ? "enabled" : "disabled");
         handler->PSendSysMessage("Active runtimes: {}", sInvasionRuntimeMgr.GetActiveRuntimeCount());
@@ -1446,6 +1515,9 @@ private:
         handler->PSendSysMessage("  Route-node actions: {}", sLivingWorldDataMgr.GetRouteNodeActionCount());
         handler->PSendSysMessage("  Dialogues: {}", sLivingWorldDataMgr.GetDialogueCount());
         handler->PSendSysMessage("  Runtime signals: {}", sLivingWorldDataMgr.GetRuntimeSignalCount());
+        handler->PSendSysMessage("  Hunts: {}", sHuntMgr.IsEnabled() ? "enabled" : "disabled");
+        handler->PSendSysMessage("  Hunt minimum level: {}", static_cast<uint32>(sHuntMgr.GetMinimumLevel()));
+        handler->PSendSysMessage("  Hunt XP multiplier: {}", sHuntMgr.GetXpMultiplier());
         return true;
     }
 

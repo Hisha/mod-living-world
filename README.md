@@ -76,3 +76,37 @@ LW is a framework rather than a collection of hard-coded events. Event-specific 
 ### Route network publishing
 
 Use `.lw route export network` with `LivingWorld.Debug = 1` to generate `lw_exports/801_routes.sql`, then copy it into `data/sql/db-world/prebuilt/801_routes.sql` when publishing the canonical route network. Published route-node IDs are data contracts and should not be renumbered casually.
+
+## Hunt / Prey prototype (0.4.0-dev)
+
+The first Hunt subsystem prototype is intentionally limited to Elwynn Forest while the encounter loop is validated.
+
+- Hunts are independently controlled by `LivingWorld.Hunts.Enable`.
+- Minimum hunt level defaults to 10 and is configurable with `LivingWorld.Hunts.MinimumLevel`.
+- Future completion XP scaling is already reserved as `LivingWorld.Hunts.XPMultiplier`; reward delivery is intentionally deferred.
+- Active hunt state is per-character and persisted in `lw_hunt_runtime`.
+- Normal creature kills in the assigned zone build randomized tracking progress.
+- The prototype performs two prey ambushes. At the configured escape-health threshold (50% in the test content), the prey becomes non-attackable and despawns.
+- At 100%, an authored final location is selected and announced. A native 3.3.5 `SMSG_GOSSIP_POI` map marker is sent for the selected final location. The clickable final activation object is the next implementation step.
+- `.lw hunt final` currently spawns the final prey after the player travels to the announced location.
+- Killing the final prey changes the contract to ready-to-turn-in; the player must return to the exact Huntmaster spawn that issued it.
+
+### First test setup
+
+`902_elwynn_hunt_test.sql` creates Huntmaster Corvin (entry `14999980`) but deliberately does not permanently place him. After startup, stand where you want the temporary Stormwind Huntmaster and run:
+
+```text
+.npc add 14999980
+```
+
+Talk to **Huntmaster Corvin <Master of the Hunt>** and choose **I seek dangerous prey.**
+
+Useful GM/debug commands:
+
+```text
+.lw hunt status
+.lw hunt progress <amount>
+.lw hunt ambush
+.lw hunt final
+.lw hunt abandon
+```

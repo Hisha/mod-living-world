@@ -34,3 +34,14 @@ LivingWorld.Scheduler.MaxActive.ResponseOrigin.2 = 1
 #
 LivingWorld.Travel.StartHour = 6
 LivingWorld.Travel.EndHour = 18
+# ---------------------------------------------------------------------------
+# Hunts / Prey
+# ---------------------------------------------------------------------------
+LivingWorld.Hunts.Enable = 1
+LivingWorld.Hunts.MinimumLevel = 10
+
+# Multiplier applied to the eventual level-appropriate Hunt completion XP.
+# The reward code is intentionally deferred while the encounter loop is tested,
+# but the balance control is established now rather than hard-coded later.
+# 0.0 = no Hunt completion XP, 0.75 = 75%, 1.0 = full baseline, 1.5 = 150%.
+LivingWorld.Hunts.XPMultiplier = 0.75
