@@ -18,8 +18,6 @@
 #include <cmath>
 #include <sstream>
 
-using namespace std::chrono_literals;
-
 namespace lw
 {
 HuntManager& HuntManager::Instance()
@@ -237,17 +235,69 @@ bool HuntManager::AddProgress(Player* player, uint8 amount, std::string& message
 
 bool HuntManager::SpawnPrey(Player* player, HuntRuntime& r, bool finalEncounter, std::string& message)
 {
-    HuntDefinition const* h=GetDefinition(r.HuntId); if(!player||!h){message="Unable to resolve hunt prey.";return false;}
-    if(!r.ActivePreyGuid.IsEmpty()){message="Your prey is already active.";return false;}
+    HuntDefinition const* h=GetDefinition(r.HuntId);
+    if(!player||!h){message="Unable to resolve hunt prey.";return false;}
+
+    // Recover automatically from a prey creature that vanished or fell far below
+    // the player.  This keeps a bad summon from permanently locking the hunt.
+    if(!r.ActivePreyGuid.IsEmpty())
+    {
+        Creature* active=ObjectAccessor::GetCreature(*player,r.ActivePreyGuid);
+        if(!active || !active->IsInWorld() || active->GetMapId()!=player->GetMapId() ||
+           active->GetDistance2d(player)>120.0f || std::fabs(active->GetPositionZ()-player->GetPositionZ())>25.0f)
+        {
+            if(active) active->DespawnOrUnsummon();
+            r.ActivePreyGuid.Clear();
+            r.ActivePreyFinal=false;
+            SaveRuntime(r);
+        }
+        else
+        {
+            message="Your prey is already active.";
+            return false;
+        }
+    }
+
     float angle=frand(0.0f,6.2831853f), dist=frand(8.0f,14.0f);
-    float x=player->GetPositionX()+std::cos(angle)*dist, y=player->GetPositionY()+std::sin(angle)*dist, z=player->GetPositionZ();
+    float x=player->GetPositionX()+std::cos(angle)*dist;
+    float y=player->GetPositionY()+std::sin(angle)*dist;
+    float z=player->GetPositionZ();
+
     if(finalEncounter && r.FinalLocationId)
     {
-        for(auto const& l:_finalLocations) if(l.Id==r.FinalLocationId){x=l.X;y=l.Y;z=l.Z;break;}
+        HuntFinalLocationDefinition const* finalLocation=nullptr;
+        for(auto const& l:_finalLocations)
+            if(l.Id==r.FinalLocationId){finalLocation=&l;break;}
+
+        if(!finalLocation){message="The final hunt location could not be resolved.";return false;}
+        if(player->GetMapId()!=finalLocation->MapId){message="Travel to the marked prey location before starting the final encounter.";return false;}
+
+        float dx=player->GetPositionX()-finalLocation->X;
+        float dy=player->GetPositionY()-finalLocation->Y;
+        if((dx*dx+dy*dy)>(120.0f*120.0f)){message="Travel to the marked prey location before starting the final encounter.";return false;}
+
+        // The player is standing at the authored site, so summon near the player
+        // instead of trusting a hand-entered Z value for the actual creature.
+        // The database coordinates still define the POI and activation site.
+        angle=frand(0.0f,6.2831853f);
+        dist=frand(7.0f,11.0f);
+        x=player->GetPositionX()+std::cos(angle)*dist;
+        y=player->GetPositionY()+std::sin(angle)*dist;
     }
+
+    if(Map* map=player->GetMap())
+    {
+        float groundZ=map->GetHeight(x,y,z+10.0f,true,50.0f);
+        if(groundZ>INVALID_HEIGHT)
+            z=groundZ+0.5f;
+    }
+
     TempSummon* prey=player->SummonCreature(h->PreyCreatureEntry,x,y,z,player->GetOrientation(),TEMPSUMMON_TIMED_OR_DEAD_DESPAWN,300000);
     if(!prey){message="The prey could not be spawned.";return false;}
     prey->SetLevel(player->GetLevel());
+    prey->UpdateAllStats();
+    prey->SetFullHealth();
+
     r.ActivePreyGuid=prey->GetGUID(); r.ActivePreyFinal=finalEncounter;
     if(!finalEncounter){r.AmbushesCompleted++; SaveRuntime(r); ChatHandler(player->GetSession()).PSendSysMessage("|cffff8000[LW Hunt]|r {} has found YOU! Drive it off!",h->Name);}
     else ChatHandler(player->GetSession()).PSendSysMessage("|cffff0000[LW Hunt]|r {} emerges for the final confrontation!",h->Name);
@@ -301,7 +351,7 @@ void HuntManager::Update(uint32 diff)
         {
             prey->CombatStop(true); prey->SetFlag(UNIT_FIELD_FLAGS,UNIT_FLAG_NON_ATTACKABLE|UNIT_FLAG_IMMUNE_TO_PC);
             ChatHandler(p->GetSession()).PSendSysMessage("|cffffff00[LW Hunt]|r {} breaks away and disappears. Continue tracking it.",h->Name);
-            prey->DespawnOrUnsummon(1500ms); r.ActivePreyGuid.Clear(); SaveRuntime(r);
+            prey->DespawnOrUnsummon(Milliseconds(1500)); r.ActivePreyGuid.Clear(); SaveRuntime(r);
         }
     }
 }

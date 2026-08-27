@@ -41,9 +41,9 @@ INSERT INTO `lw_hunt_zone` (`id`,`hunt_id`,`zone_id`,`min_level`,`max_level`,`we
 
 -- Authored final encounter sites. Coordinates can be refined in-game after the loop is proven.
 INSERT INTO `lw_hunt_final_location` (`id`,`hunt_id`,`zone_id`,`map_id`,`x`,`y`,`z`,`orientation`,`location_name`,`weight`,`enabled`,`comment`) VALUES
-(1,1,12,0,-9465.0,64.0,56.0,0,'the woods east of Goldshire',100,1,'Prototype site'),
-(2,1,12,0,-9840.0,920.0,29.0,0,'the western Elwynn woods',100,1,'Prototype site'),
-(3,1,12,0,-9135.0,-1050.0,71.0,0,'the road toward Eastvale',100,1,'Prototype site');
+(1,1,12,0,-9488.219727,67.639702,56.076900,0,'the outskirts of Goldshire',100,1,'Prototype site using verified LW route-node terrain'),
+(2,1,12,0,-9657.429688,684.276001,37.414299,0,'Westbrook Garrison',100,1,'Prototype site using verified LW route-node terrain'),
+(3,1,12,0,-9467.209961,-1273.780029,42.046200,0,'Eastvale Logging Camp',100,1,'Prototype site using verified LW route-node terrain');
 
 INSERT INTO `lw_hunt_giver` (`id`,`creature_entry`,`city_name`,`team`,`enabled`,`comment`) VALUES
 (1,@HUNTMASTER_ENTRY,'Stormwind City',1,1,'Prototype Alliance Huntmaster. Spawn manually for first test with .npc add 14999980.');
