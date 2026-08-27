@@ -1,5 +1,6 @@
 #include "HuntManager.h"
 
+#include "AllCreatureScript.h"
 #include "Chat.h"
 #include "Creature.h"
 #include "CreatureScript.h"
@@ -13,9 +14,12 @@ namespace
 {
 enum HuntGossipAction : uint32
 {
-    ACTION_REQUEST_HUNT = GOSSIP_ACTION_INFO_DEF + 1,
-    ACTION_TURN_IN_HUNT = GOSSIP_ACTION_INFO_DEF + 2,
-    ACTION_ABANDON_HUNT = GOSSIP_ACTION_INFO_DEF + 3
+    ACTION_HUNT_STATUS = GOSSIP_ACTION_INFO_DEF + 1,
+    ACTION_REQUEST_HUNT = GOSSIP_ACTION_INFO_DEF + 2,
+    ACTION_TURN_IN_HUNT = GOSSIP_ACTION_INFO_DEF + 3,
+    ACTION_ABANDON_HUNT = GOSSIP_ACTION_INFO_DEF + 4,
+    ACTION_HUNT_STATS = GOSSIP_ACTION_INFO_DEF + 5,
+    ACTION_GUARD_HUNTMASTER = GOSSIP_ACTION_INFO_DEF + 700
 };
 
 class LivingWorldHuntmasterScript final : public CreatureScript
@@ -39,10 +43,11 @@ public:
         }
         else
         {
-            AddGossipItemFor(player, GOSSIP_ICON_CHAT, "Tell me about my current hunt.", GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF);
+            AddGossipItemFor(player, GOSSIP_ICON_CHAT, "Tell me about my current hunt.", GOSSIP_SENDER_MAIN, ACTION_HUNT_STATUS);
             AddGossipItemFor(player, GOSSIP_ICON_CHAT, "I wish to abandon this hunt.", GOSSIP_SENDER_MAIN, ACTION_ABANDON_HUNT);
         }
 
+        AddGossipItemFor(player, GOSSIP_ICON_CHAT, "Show me my hunting record.", GOSSIP_SENDER_MAIN, ACTION_HUNT_STATS);
         SendGossipMenuFor(player, 1, creature->GetGUID());
         return true;
     }
@@ -62,6 +67,10 @@ public:
             case ACTION_ABANDON_HUNT:
                 sHuntMgr.AbandonHunt(player, message);
                 break;
+            case ACTION_HUNT_STATS:
+                message = sHuntMgr.BuildStats(player);
+                break;
+            case ACTION_HUNT_STATUS:
             default:
                 message = sHuntMgr.BuildStatus(player);
                 break;
@@ -73,6 +82,38 @@ public:
     }
 };
 
+// Extends the normal capital-city guard gossip without replacing the stock
+// directions.  We prepare the guard's normal database menu, append one Living
+// World option, and only consume our own action when it is selected.
+class LivingWorldHuntGuardLocatorScript final : public AllCreatureScript
+{
+public:
+    LivingWorldHuntGuardLocatorScript() : AllCreatureScript("LivingWorldHuntGuardLocatorScript") { }
+
+    bool CanCreatureGossipHello(Player* player, Creature* creature) override
+    {
+        if (!sHuntMgr.IsEnabled() || !player || !creature || !sHuntMgr.IsGuardLocator(creature->GetEntry()))
+            return false;
+
+        player->PrepareGossipMenu(creature, creature->GetGossipMenuId(), true);
+        AddGossipItemFor(player, GOSSIP_ICON_CHAT, "Where is the Huntmaster?", GOSSIP_SENDER_MAIN, ACTION_GUARD_HUNTMASTER);
+        player->SendPreparedGossip(creature);
+        return true;
+    }
+
+    bool CanCreatureGossipSelect(Player* player, Creature* creature, uint32 /*sender*/, uint32 action) override
+    {
+        if (action != ACTION_GUARD_HUNTMASTER || !player || !creature || !sHuntMgr.IsGuardLocator(creature->GetEntry()))
+            return false;
+
+        std::string message;
+        sHuntMgr.SendHuntmasterLocation(player, creature->GetEntry(), message);
+        if (!message.empty())
+            ChatHandler(player->GetSession()).PSendSysMessage("|cff33ccff[LW Hunt]|r {}", message);
+        CloseGossipMenuFor(player);
+        return true;
+    }
+};
 
 class LivingWorldHuntActivationScript final : public GameObjectScript
 {
@@ -82,11 +123,10 @@ public:
     bool OnGossipHello(Player* player, GameObject* gameObject) override
     {
         std::string message;
-        bool const handled = sHuntMgr.OnFinalActivatorUsed(player, gameObject, message);
+        sHuntMgr.OnFinalActivatorUsed(player, gameObject, message);
         if (!message.empty())
             ChatHandler(player->GetSession()).PSendSysMessage("|cff33ccff[LW Hunt]|r {}", message);
-        (void)handled;
-        return true; // swallow normal GO behavior for the LW activation marker
+        return true;
     }
 };
 
@@ -113,6 +153,7 @@ public:
 void AddLivingWorldHuntScripts()
 {
     new LivingWorldHuntmasterScript();
+    new LivingWorldHuntGuardLocatorScript();
     new LivingWorldHuntActivationScript();
     new LivingWorldHuntPlayerScript();
 }

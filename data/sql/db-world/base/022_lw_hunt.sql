@@ -1,39 +1,44 @@
--- Living World Hunt/Prey subsystem
+-- Living World Hunt/Prey subsystem - canonical schema
 CREATE TABLE IF NOT EXISTS `lw_hunt` (
   `id` INT UNSIGNED NOT NULL,
   `name` VARCHAR(100) NOT NULL,
   `min_level` TINYINT UNSIGNED NOT NULL DEFAULT 10,
   `max_level` TINYINT UNSIGNED NOT NULL DEFAULT 80,
-  `prey_creature_entry` MEDIUMINT UNSIGNED NOT NULL,
+  `prey_creature_entry` INT UNSIGNED NOT NULL DEFAULT 0,
   `prey_lw_template_id` INT UNSIGNED NOT NULL DEFAULT 0,
-  `activation_gameobject_entry` MEDIUMINT UNSIGNED NOT NULL DEFAULT 0,
+  `activation_gameobject_entry` INT UNSIGNED NOT NULL DEFAULT 0,
   `ambush_health_multiplier` FLOAT NOT NULL DEFAULT 4.0,
   `final_health_multiplier` FLOAT NOT NULL DEFAULT 6.0,
   `escape_health_pct` TINYINT UNSIGNED NOT NULL DEFAULT 50,
   `ambush_count` TINYINT UNSIGNED NOT NULL DEFAULT 2,
-  `enabled` TINYINT(1) UNSIGNED NOT NULL DEFAULT 1,
+  `enabled` TINYINT UNSIGNED NOT NULL DEFAULT 1,
   `comment` VARCHAR(255) NULL,
   PRIMARY KEY (`id`),
   KEY `idx_lw_hunt_level` (`min_level`,`max_level`,`enabled`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- World hunting grounds are independent of prey definitions. Any Huntmaster
+-- may assign any enabled level-appropriate zone; faction is intentionally not
+-- represented here.
 CREATE TABLE IF NOT EXISTS `lw_hunt_zone` (
   `id` INT UNSIGNED NOT NULL,
-  `hunt_id` INT UNSIGNED NOT NULL,
   `zone_id` INT UNSIGNED NOT NULL,
+  `map_id` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  `name` VARCHAR(100) NOT NULL,
   `min_level` TINYINT UNSIGNED NOT NULL DEFAULT 1,
   `max_level` TINYINT UNSIGNED NOT NULL DEFAULT 80,
   `weight` INT UNSIGNED NOT NULL DEFAULT 100,
-  `enabled` TINYINT(1) UNSIGNED NOT NULL DEFAULT 1,
+  `enabled` TINYINT UNSIGNED NOT NULL DEFAULT 1,
   `comment` VARCHAR(255) NULL,
   PRIMARY KEY (`id`),
-  KEY `idx_lw_hunt_zone_hunt` (`hunt_id`,`enabled`),
-  KEY `idx_lw_hunt_zone_zone` (`zone_id`,`enabled`)
+  UNIQUE KEY `uq_lw_hunt_zone_zone` (`zone_id`),
+  KEY `idx_lw_hunt_zone_level` (`min_level`,`max_level`,`enabled`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Authored final sites are zone assets, not prey assets. This lets every prey
+-- reuse the same verified, settlement-safe encounter locations in a zone.
 CREATE TABLE IF NOT EXISTS `lw_hunt_final_location` (
   `id` INT UNSIGNED NOT NULL,
-  `hunt_id` INT UNSIGNED NOT NULL,
   `zone_id` INT UNSIGNED NOT NULL,
   `map_id` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
   `x` FLOAT NOT NULL,
@@ -42,19 +47,35 @@ CREATE TABLE IF NOT EXISTS `lw_hunt_final_location` (
   `orientation` FLOAT NOT NULL DEFAULT 0,
   `location_name` VARCHAR(120) NOT NULL,
   `weight` INT UNSIGNED NOT NULL DEFAULT 100,
-  `enabled` TINYINT(1) UNSIGNED NOT NULL DEFAULT 1,
+  `enabled` TINYINT UNSIGNED NOT NULL DEFAULT 1,
   `comment` VARCHAR(255) NULL,
   PRIMARY KEY (`id`),
-  KEY `idx_lw_hunt_final` (`hunt_id`,`zone_id`,`enabled`)
+  KEY `idx_lw_hunt_final` (`zone_id`,`enabled`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `lw_hunt_giver` (
   `id` INT UNSIGNED NOT NULL,
-  `creature_entry` MEDIUMINT UNSIGNED NOT NULL,
+  `creature_entry` INT UNSIGNED NOT NULL,
   `city_name` VARCHAR(80) NOT NULL,
-  `team` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=both, 1=Alliance, 2=Horde',
-  `enabled` TINYINT(1) UNSIGNED NOT NULL DEFAULT 1,
+  `map_id` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  `x` FLOAT NOT NULL,
+  `y` FLOAT NOT NULL,
+  `z` FLOAT NOT NULL,
+  `enabled` TINYINT UNSIGNED NOT NULL DEFAULT 1,
   `comment` VARCHAR(255) NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_lw_hunt_giver_entry` (`creature_entry`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Capital guards use this mapping to append "Where is the Huntmaster?" to
+-- their normal direction gossip without replacing Blizzard/AzerothCore menus.
+CREATE TABLE IF NOT EXISTS `lw_hunt_guard_locator` (
+  `id` INT UNSIGNED NOT NULL,
+  `guard_creature_entry` INT UNSIGNED NOT NULL,
+  `hunt_giver_id` INT UNSIGNED NOT NULL,
+  `enabled` TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  `comment` VARCHAR(255) NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_lw_hunt_guard_locator` (`guard_creature_entry`),
+  KEY `idx_lw_hunt_guard_giver` (`hunt_giver_id`,`enabled`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

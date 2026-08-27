@@ -43,6 +43,8 @@ void HuntManager::Reset()
     _zones.clear();
     _finalLocations.clear();
     _giverEntries.clear();
+    _givers.clear();
+    _guardLocators.clear();
     _runtimes.clear();
     _updateTimerMs = 0;
 }
@@ -53,6 +55,8 @@ void HuntManager::LoadDefinitions()
     _zones.clear();
     _finalLocations.clear();
     _giverEntries.clear();
+    _givers.clear();
+    _guardLocators.clear();
 
     if (!_enabled)
         return;
@@ -73,33 +77,46 @@ void HuntManager::LoadDefinitions()
     }
 
     if (QueryResult result = WorldDatabase.Query(
-        "SELECT `id`,`hunt_id`,`zone_id`,`min_level`,`max_level`,`weight`,`enabled` FROM `lw_hunt_zone` WHERE `enabled`=1"))
+        "SELECT `id`,`zone_id`,`map_id`,`name`,`min_level`,`max_level`,`weight`,`enabled` FROM `lw_hunt_zone` WHERE `enabled`=1"))
     {
         do
         {
             Field* f=result->Fetch(); HuntZoneDefinition d;
-            d.Id=f[0].Get<uint32>(); d.HuntId=f[1].Get<uint32>(); d.ZoneId=f[2].Get<uint32>(); d.MinLevel=f[3].Get<uint8>(); d.MaxLevel=f[4].Get<uint8>(); d.Weight=f[5].Get<uint32>(); d.Enabled=f[6].Get<uint8>()!=0;
+            d.Id=f[0].Get<uint32>(); d.ZoneId=f[1].Get<uint32>(); d.MapId=f[2].Get<uint16>(); d.Name=f[3].Get<std::string>();
+            d.MinLevel=f[4].Get<uint8>(); d.MaxLevel=f[5].Get<uint8>(); d.Weight=f[6].Get<uint32>(); d.Enabled=f[7].Get<uint8>()!=0;
             _zones.push_back(d);
         } while(result->NextRow());
     }
 
     if (QueryResult result = WorldDatabase.Query(
-        "SELECT `id`,`hunt_id`,`zone_id`,`map_id`,`x`,`y`,`z`,`orientation`,`location_name`,`weight`,`enabled` FROM `lw_hunt_final_location` WHERE `enabled`=1"))
+        "SELECT `id`,`zone_id`,`map_id`,`x`,`y`,`z`,`orientation`,`location_name`,`weight`,`enabled` FROM `lw_hunt_final_location` WHERE `enabled`=1"))
     {
         do
         {
             Field* f=result->Fetch(); HuntFinalLocationDefinition d;
-            d.Id=f[0].Get<uint32>(); d.HuntId=f[1].Get<uint32>(); d.ZoneId=f[2].Get<uint32>(); d.MapId=f[3].Get<uint16>(); d.X=f[4].Get<float>(); d.Y=f[5].Get<float>(); d.Z=f[6].Get<float>(); d.Orientation=f[7].Get<float>(); d.LocationName=f[8].Get<std::string>(); d.Weight=f[9].Get<uint32>(); d.Enabled=f[10].Get<uint8>()!=0;
+            d.Id=f[0].Get<uint32>(); d.ZoneId=f[1].Get<uint32>(); d.MapId=f[2].Get<uint16>(); d.X=f[3].Get<float>(); d.Y=f[4].Get<float>(); d.Z=f[5].Get<float>(); d.Orientation=f[6].Get<float>(); d.LocationName=f[7].Get<std::string>(); d.Weight=f[8].Get<uint32>(); d.Enabled=f[9].Get<uint8>()!=0;
             _finalLocations.push_back(d);
         } while(result->NextRow());
     }
 
-    if (QueryResult result = WorldDatabase.Query("SELECT `creature_entry`,`id` FROM `lw_hunt_giver` WHERE `enabled`=1"))
+    if (QueryResult result = WorldDatabase.Query(
+        "SELECT `id`,`creature_entry`,`city_name`,`map_id`,`x`,`y`,`z`,`enabled` FROM `lw_hunt_giver` WHERE `enabled`=1"))
     {
-        do { Field* f=result->Fetch(); _giverEntries[f[0].Get<uint32>()]=f[1].Get<uint32>(); } while(result->NextRow());
+        do
+        {
+            Field* f=result->Fetch(); HuntGiverDefinition d;
+            d.Id=f[0].Get<uint32>(); d.CreatureEntry=f[1].Get<uint32>(); d.CityName=f[2].Get<std::string>(); d.MapId=f[3].Get<uint16>();
+            d.X=f[4].Get<float>(); d.Y=f[5].Get<float>(); d.Z=f[6].Get<float>(); d.Enabled=f[7].Get<uint8>()!=0;
+            _giverEntries[d.CreatureEntry]=d.Id; _givers[d.Id]=d;
+        } while(result->NextRow());
     }
 
-    LOG_INFO("server.loading", "[LW Hunt] Loaded {} hunt(s), {} zone rule(s), {} final location(s), and {} hunt giver entry(s).", _hunts.size(), _zones.size(), _finalLocations.size(), _giverEntries.size());
+    if (QueryResult result = WorldDatabase.Query("SELECT `guard_creature_entry`,`hunt_giver_id` FROM `lw_hunt_guard_locator` WHERE `enabled`=1"))
+    {
+        do { Field* f=result->Fetch(); _guardLocators[f[0].Get<uint32>()]=f[1].Get<uint32>(); } while(result->NextRow());
+    }
+
+    LOG_INFO("server.loading", "[LW Hunt] Loaded {} hunt(s), {} zone(s), {} final location(s), {} Huntmaster(s), and {} guard locator entry(s).", _hunts.size(), _zones.size(), _finalLocations.size(), _giverEntries.size(), _guardLocators.size());
 }
 
 void HuntManager::Initialize()
@@ -142,21 +159,91 @@ HuntRuntime const* HuntManager::GetRuntime(Player const* player) const
 }
 HuntDefinition const* HuntManager::GetDefinition(uint32 id) const { auto it=_hunts.find(id); return it==_hunts.end()?nullptr:&it->second; }
 bool HuntManager::IsHuntGiver(uint32 entry) const { return _giverEntries.find(entry)!=_giverEntries.end(); }
+bool HuntManager::IsGuardLocator(uint32 entry) const { return _guardLocators.find(entry)!=_guardLocators.end(); }
 
-HuntZoneDefinition const* HuntManager::SelectZone(HuntDefinition const& hunt, uint8 level) const
+HuntZoneDefinition const* HuntManager::GetZone(uint32 zoneId) const
+{
+    for (auto const& zone : _zones)
+        if (zone.ZoneId == zoneId && zone.Enabled)
+            return &zone;
+    return nullptr;
+}
+
+HuntZoneDefinition const* HuntManager::SelectZone(uint8 level) const
 {
     std::vector<HuntZoneDefinition const*> eligible;
-    for(auto const& z:_zones) if(z.HuntId==hunt.Id && z.Enabled && level>=z.MinLevel && level<=z.MaxLevel) eligible.push_back(&z);
-    if(eligible.empty()) return nullptr;
-    return eligible[urand(0, static_cast<uint32>(eligible.size()-1))];
+    uint64 totalWeight = 0;
+    for (auto const& zone : _zones)
+    {
+        if (!zone.Enabled || level < zone.MinLevel || level > zone.MaxLevel)
+            continue;
+
+        bool hasFinalSite = false;
+        for (auto const& location : _finalLocations)
+            if (location.Enabled && location.ZoneId == zone.ZoneId)
+            {
+                hasFinalSite = true;
+                break;
+            }
+
+        if (!hasFinalSite)
+            continue;
+
+        eligible.push_back(&zone);
+        totalWeight += std::max<uint32>(1, zone.Weight);
+    }
+
+    if (eligible.empty())
+        return nullptr;
+
+    uint64 roll = urand(1, static_cast<uint32>(std::min<uint64>(totalWeight, std::numeric_limits<uint32>::max())));
+    for (HuntZoneDefinition const* zone : eligible)
+    {
+        uint32 weight = std::max<uint32>(1, zone->Weight);
+        if (roll <= weight)
+            return zone;
+        roll -= weight;
+    }
+    return eligible.back();
 }
 
 HuntFinalLocationDefinition const* HuntManager::SelectFinalLocation(HuntRuntime const& runtime) const
 {
     std::vector<HuntFinalLocationDefinition const*> eligible;
-    for(auto const& l:_finalLocations) if(l.HuntId==runtime.HuntId && l.ZoneId==runtime.ZoneId && l.Enabled) eligible.push_back(&l);
+    uint32 totalWeight = 0;
+    for(auto const& l:_finalLocations)
+        if(l.ZoneId==runtime.ZoneId && l.Enabled)
+        {
+            eligible.push_back(&l);
+            totalWeight += std::max<uint32>(1, l.Weight);
+        }
     if(eligible.empty()) return nullptr;
-    return eligible[urand(0, static_cast<uint32>(eligible.size()-1))];
+    uint32 roll=urand(1,totalWeight);
+    for(auto const* l:eligible)
+    {
+        uint32 weight=std::max<uint32>(1,l->Weight);
+        if(roll<=weight) return l;
+        roll-=weight;
+    }
+    return eligible.back();
+}
+
+bool HuntManager::SendHuntmasterLocation(Player* player, uint32 guardEntry, std::string& message) const
+{
+    if (!player) { message = "Player required."; return false; }
+    auto locator = _guardLocators.find(guardEntry);
+    if (locator == _guardLocators.end()) { message = "That guard does not know a Huntmaster location."; return false; }
+    auto giver = _givers.find(locator->second);
+    if (giver == _givers.end() || !giver->second.Enabled) { message = "The Huntmaster location is unavailable."; return false; }
+
+    HuntGiverDefinition const& g = giver->second;
+    if (player->GetMapId() != g.MapId) { message = "The Huntmaster is not on this map."; return false; }
+
+    WorldPacket poi(SMSG_GOSSIP_POI, 64);
+    poi << uint32(6) << float(g.X) << float(g.Y) << uint32(7) << uint32(0) << std::string("Huntmaster - ") + g.CityName;
+    player->GetSession()->SendPacket(&poi);
+    message = "The Huntmaster has been marked on your map.";
+    return true;
 }
 
 bool HuntManager::RequestHunt(Player* player, Creature* giver, std::string& message)
@@ -167,14 +254,18 @@ bool HuntManager::RequestHunt(Player* player, Creature* giver, std::string& mess
     if(HasActiveHunt(player)){message="You already have an active hunt.";return false;}
 
     std::vector<HuntDefinition const*> eligible;
-    for(auto const& [id,h]:_hunts) if(h.Enabled && player->GetLevel()>=h.MinLevel && player->GetLevel()<=h.MaxLevel && SelectZone(h,player->GetLevel())) eligible.push_back(&h);
+    for(auto const& [id,h]:_hunts)
+        if(h.Enabled && player->GetLevel()>=h.MinLevel && player->GetLevel()<=h.MaxLevel)
+            eligible.push_back(&h);
     if(eligible.empty()){message="I have no suitable prey for you right now.";return false;}
-    HuntDefinition const& hunt=*eligible[urand(0,static_cast<uint32>(eligible.size()-1))];
-    HuntZoneDefinition const* zone=SelectZone(hunt,player->GetLevel()); if(!zone){message="No suitable hunting ground was found.";return false;}
 
+    HuntZoneDefinition const* zone=SelectZone(player->GetLevel());
+    if(!zone){message="I have no level-appropriate hunting grounds with a safe final site configured right now.";return false;}
+
+    HuntDefinition const& hunt=*eligible[urand(0,static_cast<uint32>(eligible.size()-1))];
     HuntRuntime r; r.CharacterGuid=player->GetGUID().GetCounter(); r.HuntId=hunt.Id; r.GiverEntry=giver->GetEntry(); r.GiverSpawnId=giver->GetSpawnId(); r.ZoneId=zone->ZoneId; r.State=HuntState::Tracking;
     _runtimes[r.CharacterGuid]=r; SaveRuntime(r);
-    message="Your quarry is "+hunt.Name+". Search Elwynn Forest and hunt normally; signs of your prey will reveal themselves.";
+    message="Your quarry is "+hunt.Name+". Travel to "+zone->Name+" and hunt normally; signs of your prey will reveal themselves.";
     return true;
 }
 
@@ -194,7 +285,13 @@ bool HuntManager::TurnInHunt(Player* player, Creature* giver, std::string& messa
     if(r.State!=HuntState::ReadyToTurnIn){message="Your quarry still lives.";return false;}
     if(r.GiverEntry!=giver->GetEntry() || (r.GiverSpawnId && r.GiverSpawnId!=giver->GetSpawnId())){message="Return to the Huntmaster who gave you this hunt.";return false;}
     HuntRuntime& mutableRuntime=it->second; RemoveFinalActivator(player,mutableRuntime);
-    DeleteRuntime(r.CharacterGuid); message="A fine hunt. Your reward system will be added after the encounter loop is proven."; return true;
+    CharacterDatabase.Execute(
+        "INSERT INTO `lw_hunt_stats` (`guid`,`total_completed`,`daily_completed`,`daily_reset_date`,`last_completed_at`) "
+        "VALUES ({},1,1,CURRENT_DATE,CURRENT_TIMESTAMP) "
+        "ON DUPLICATE KEY UPDATE `total_completed`=`total_completed`+1, "
+        "`daily_completed`=IF(`daily_reset_date`=CURRENT_DATE,`daily_completed`+1,1), "
+        "`daily_reset_date`=CURRENT_DATE,`last_completed_at`=CURRENT_TIMESTAMP", r.CharacterGuid);
+    DeleteRuntime(r.CharacterGuid); message="A fine hunt. Your kill has been added to your hunting record."; return true;
 }
 
 uint8 HuntManager::GetNextAmbushThreshold(HuntRuntime const& r, HuntDefinition const& h) const
@@ -503,10 +600,27 @@ void HuntManager::Update(uint32 diff)
     }
 }
 
+std::string HuntManager::BuildStats(Player const* player) const
+{
+    if (!player) return "No hunting record is available.";
+    uint32 guid = player->GetGUID().GetCounter();
+    QueryResult result = CharacterDatabase.Query(
+        "SELECT `total_completed`,IF(`daily_reset_date`=CURRENT_DATE,`daily_completed`,0),`greens_received`,`blues_received`,`epics_received` "
+        "FROM `lw_hunt_stats` WHERE `guid`={}", guid);
+    if (!result) return "Hunting Record: 0 completed hunts. No rewards recorded yet.";
+    Field* f = result->Fetch();
+    std::ostringstream out;
+    out << "Hunting Record: " << f[0].Get<uint32>() << " total | " << f[1].Get<uint32>() << " today"
+        << " | green rewards " << f[2].Get<uint32>() << " | blue rewards " << f[3].Get<uint32>()
+        << " | epic rewards " << f[4].Get<uint32>();
+    return out.str();
+}
+
 std::string HuntManager::BuildStatus(Player const* player) const
 {
     std::ostringstream s; if(!_enabled){s<<"Hunts: disabled";return s.str();} if(!player){s<<"Hunts enabled; minimum level "<<uint32(_minimumLevel)<<", XP multiplier "<<_xpMultiplier;return s.str();}
     HuntRuntime const* r=GetRuntime(player); if(!r){s<<"No active hunt.";return s.str();} HuntDefinition const* h=GetDefinition(r->HuntId);
-    s<<"Hunt: "<<(h?h->Name:"unknown")<<" | zone="<<r->ZoneId<<" | tracking="<<uint32(r->TrackingProgress)<<"% | ambushes="<<uint32(r->AmbushesCompleted)<<" | state="<<uint32(static_cast<uint8>(r->State)); return s.str();
+    HuntZoneDefinition const* z=GetZone(r->ZoneId);
+    s<<"Hunt: "<<(h?h->Name:"unknown")<<" | zone="<<(z?z->Name:std::to_string(r->ZoneId))<<" | tracking="<<uint32(r->TrackingProgress)<<"% | ambushes="<<uint32(r->AmbushesCompleted)<<" | state="<<uint32(static_cast<uint8>(r->State)); return s.str();
 }
 }

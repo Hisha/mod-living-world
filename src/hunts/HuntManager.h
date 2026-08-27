@@ -41,8 +41,9 @@ struct HuntDefinition
 struct HuntZoneDefinition
 {
     uint32 Id = 0;
-    uint32 HuntId = 0;
     uint32 ZoneId = 0;
+    uint16 MapId = 0;
+    std::string Name;
     uint8 MinLevel = 1;
     uint8 MaxLevel = 80;
     uint32 Weight = 100;
@@ -52,7 +53,6 @@ struct HuntZoneDefinition
 struct HuntFinalLocationDefinition
 {
     uint32 Id = 0;
-    uint32 HuntId = 0;
     uint32 ZoneId = 0;
     uint16 MapId = 0;
     float X = 0.0f;
@@ -61,6 +61,19 @@ struct HuntFinalLocationDefinition
     float Orientation = 0.0f;
     std::string LocationName;
     uint32 Weight = 100;
+    bool Enabled = false;
+};
+
+
+struct HuntGiverDefinition
+{
+    uint32 Id = 0;
+    uint32 CreatureEntry = 0;
+    std::string CityName;
+    uint16 MapId = 0;
+    float X = 0.0f;
+    float Y = 0.0f;
+    float Z = 0.0f;
     bool Enabled = false;
 };
 
@@ -109,8 +122,11 @@ public:
     bool ForceAmbush(Player* player, std::string& message);
     bool ForceFinal(Player* player, std::string& message);
     std::string BuildStatus(Player const* player) const;
+    std::string BuildStats(Player const* player) const;
 
     bool IsHuntGiver(uint32 creatureEntry) const;
+    bool IsGuardLocator(uint32 creatureEntry) const;
+    bool SendHuntmasterLocation(Player* player, uint32 guardEntry, std::string& message) const;
 
 private:
     HuntManager() = default;
@@ -118,7 +134,8 @@ private:
     void LoadRuntimes();
     void SaveRuntime(HuntRuntime const& runtime);
     void DeleteRuntime(uint32 characterGuid);
-    HuntZoneDefinition const* SelectZone(HuntDefinition const& hunt, uint8 playerLevel) const;
+    HuntZoneDefinition const* SelectZone(uint8 playerLevel) const;
+    HuntZoneDefinition const* GetZone(uint32 zoneId) const;
     HuntFinalLocationDefinition const* SelectFinalLocation(HuntRuntime const& runtime) const;
     bool SpawnPrey(Player* player, HuntRuntime& runtime, bool finalEncounter, std::string& message);
     uint32 ResolvePreyEntry(HuntDefinition const& hunt) const;
@@ -138,6 +155,8 @@ private:
     std::vector<HuntZoneDefinition> _zones;
     std::vector<HuntFinalLocationDefinition> _finalLocations;
     std::unordered_map<uint32, uint32> _giverEntries;
+    std::unordered_map<uint32, HuntGiverDefinition> _givers;
+    std::unordered_map<uint32, uint32> _guardLocators;
     std::unordered_map<uint32, HuntRuntime> _runtimes;
 };
 }
