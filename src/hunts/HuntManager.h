@@ -14,6 +14,13 @@ class Player;
 
 namespace lw
 {
+enum class HuntSearchScope : uint8
+{
+    LocalRegion = 0,
+    Continent = 1,
+    World = 2
+};
+
 enum class HuntState : uint8
 {
     None = 0,
@@ -43,6 +50,7 @@ struct HuntZoneDefinition
     uint32 Id = 0;
     uint32 ZoneId = 0;
     uint16 MapId = 0;
+    uint8 ContinentId = 0;
     std::string Name;
     uint8 MinLevel = 1;
     uint8 MaxLevel = 80;
@@ -71,6 +79,7 @@ struct HuntGiverDefinition
     uint32 CreatureEntry = 0;
     std::string CityName;
     uint16 MapId = 0;
+    uint8 ContinentId = 0;
     float X = 0.0f;
     float Y = 0.0f;
     float Z = 0.0f;
@@ -98,7 +107,7 @@ class HuntManager
 public:
     static HuntManager& Instance();
 
-    void Configure(bool enabled, uint8 minimumLevel, float xpMultiplier, bool debug);
+    void Configure(bool enabled, uint8 minimumLevel, float xpMultiplier, HuntSearchScope searchScope, bool debug);
     void Reset();
     void LoadDefinitions();
     void Initialize();
@@ -134,7 +143,7 @@ private:
     void LoadRuntimes();
     void SaveRuntime(HuntRuntime const& runtime);
     void DeleteRuntime(uint32 characterGuid);
-    HuntZoneDefinition const* SelectZone(uint8 playerLevel) const;
+    HuntZoneDefinition const* SelectZone(uint8 playerLevel, HuntGiverDefinition const& giver) const;
     HuntZoneDefinition const* GetZone(uint32 zoneId) const;
     HuntFinalLocationDefinition const* SelectFinalLocation(HuntRuntime const& runtime) const;
     bool SpawnPrey(Player* player, HuntRuntime& runtime, bool finalEncounter, std::string& message);
@@ -150,6 +159,7 @@ private:
     bool _debug = false;
     uint8 _minimumLevel = 10;
     float _xpMultiplier = 0.75f;
+    HuntSearchScope _searchScope = HuntSearchScope::World;
     uint32 _updateTimerMs = 0;
 
     std::unordered_map<uint32, HuntDefinition> _hunts;
@@ -158,6 +168,7 @@ private:
     std::unordered_map<uint32, uint32> _giverEntries;
     std::unordered_map<uint32, HuntGiverDefinition> _givers;
     std::unordered_map<uint32, uint32> _guardLocators;
+    std::unordered_map<uint32, std::vector<uint32>> _giverLocalZones;
     std::unordered_map<uint32, HuntRuntime> _runtimes;
 };
 }

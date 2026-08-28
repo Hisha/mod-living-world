@@ -566,6 +566,7 @@ enum class LwConfig
     HuntsEnabled,
     HuntsMinimumLevel,
     HuntsXpMultiplier,
+    HuntsSearchScope,
     TravelStartHour,
     TravelEndHour,
     SchedulerEnabled,
@@ -595,6 +596,7 @@ public:
         SetConfigValue<bool>(LwConfig::HuntsEnabled, "LivingWorld.Hunts.Enable", true);
         SetConfigValue<uint32>(LwConfig::HuntsMinimumLevel, "LivingWorld.Hunts.MinimumLevel", 10);
         SetConfigValue<float>(LwConfig::HuntsXpMultiplier, "LivingWorld.Hunts.XPMultiplier", 0.75f);
+        SetConfigValue<uint32>(LwConfig::HuntsSearchScope, "LivingWorld.Hunts.SearchScope", 2);
         SetConfigValue<uint32>(LwConfig::TravelStartHour, "LivingWorld.Travel.StartHour", 6);
         SetConfigValue<uint32>(LwConfig::TravelEndHour, "LivingWorld.Travel.EndHour", 18);
         SetConfigValue<bool>(LwConfig::SchedulerEnabled, "LivingWorld.Scheduler.Enable", true);
@@ -669,6 +671,7 @@ public:
             livingWorldConfig.GetConfigValue<bool>(LwConfig::HuntsEnabled),
             static_cast<uint8>(livingWorldConfig.GetConfigValue<uint32>(LwConfig::HuntsMinimumLevel)),
             livingWorldConfig.GetConfigValue<float>(LwConfig::HuntsXpMultiplier),
+            static_cast<lw::HuntSearchScope>(std::min<uint32>(2, livingWorldConfig.GetConfigValue<uint32>(LwConfig::HuntsSearchScope))),
             livingWorldConfig.GetConfigValue<bool>(LwConfig::Debug));
         if (livingWorldConfig.GetConfigValue<bool>(LwConfig::HuntsEnabled))
             sHuntMgr.LoadDefinitions();

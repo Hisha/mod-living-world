@@ -83,17 +83,17 @@ INSERT INTO `creature`
 (@LW_HUNTMASTER_CGUID+10,@DA_ENTRY,571,0,0,1,1,0,5773.8013,548.9488,651.6386,0.8435841,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Dalaran');
 
 DELETE FROM `lw_hunt_giver` WHERE `id` BETWEEN 1 AND 10;
-INSERT INTO `lw_hunt_giver` (`id`,`creature_entry`,`city_name`,`map_id`,`x`,`y`,`z`,`enabled`,`comment`) VALUES
-(1,@SW_ENTRY,'Stormwind City',0,-8503.775,566.42554,99.48243,1,'Alliance capital Huntmaster'),
-(2,@IF_ENTRY,'Ironforge',0,-5036.303,-1189.7064,507.4897,1,'Alliance capital Huntmaster'),
-(3,@DN_ENTRY,'Darnassus',1,9947.34,2272.71,1341.47,1,'Alliance capital Huntmaster'),
-(4,@EX_ENTRY,'The Exodar',530,-4185.3833,-11559.71,-125.5796,1,'Alliance capital Huntmaster'),
-(5,@OG_ENTRY,'Orgrimmar',1,1857.5254,-4516.36,24.02204,1,'Horde capital Huntmaster'),
-(6,@TB_ENTRY,'Thunder Bluff',1,-1401.8701,-144.85625,159.25444,1,'Horde capital Huntmaster'),
-(7,@UC_ENTRY,'Undercity',0,1476.3986,36.700302,-62.353333,1,'Horde capital Huntmaster'),
-(8,@SM_ENTRY,'Silvermoon City',530,9801.341,-7324.399,14.6854105,1,'Horde capital Huntmaster'),
-(9,@SH_ENTRY,'Shattrath City',530,-2019.2322,5203.5225,-35.69525,1,'Neutral Outland hub Huntmaster'),
-(10,@DA_ENTRY,'Dalaran',571,5773.8013,548.9488,651.6386,1,'Neutral Northrend hub Huntmaster');
+INSERT INTO `lw_hunt_giver` (`id`,`creature_entry`,`city_name`,`map_id`,`continent_id`,`x`,`y`,`z`,`enabled`,`comment`) VALUES
+(1,@SW_ENTRY,'Stormwind City',0,1,-8503.775,566.42554,99.48243,1,'Alliance capital Huntmaster'),
+(2,@IF_ENTRY,'Ironforge',0,1,-5036.303,-1189.7064,507.4897,1,'Alliance capital Huntmaster'),
+(3,@DN_ENTRY,'Darnassus',1,2,9947.34,2272.71,1341.47,1,'Alliance capital Huntmaster'),
+(4,@EX_ENTRY,'The Exodar',530,2,-4185.3833,-11559.71,-125.5796,1,'Alliance capital Huntmaster'),
+(5,@OG_ENTRY,'Orgrimmar',1,2,1857.5254,-4516.36,24.02204,1,'Horde capital Huntmaster'),
+(6,@TB_ENTRY,'Thunder Bluff',1,2,-1401.8701,-144.85625,159.25444,1,'Horde capital Huntmaster'),
+(7,@UC_ENTRY,'Undercity',0,1,1476.3986,36.700302,-62.353333,1,'Horde capital Huntmaster'),
+(8,@SM_ENTRY,'Silvermoon City',530,1,9801.341,-7324.399,14.6854105,1,'Horde capital Huntmaster'),
+(9,@SH_ENTRY,'Shattrath City',530,3,-2019.2322,5203.5225,-35.69525,1,'Neutral Outland hub Huntmaster'),
+(10,@DA_ENTRY,'Dalaran',571,4,5773.8013,548.9488,651.6386,1,'Neutral Northrend hub Huntmaster');
 
 DELETE FROM `lw_hunt_guard_locator` WHERE `id` BETWEEN 1 AND 13;
 INSERT INTO `lw_hunt_guard_locator` (`id`,`guard_creature_entry`,`hunt_giver_id`,`enabled`,`comment`) VALUES

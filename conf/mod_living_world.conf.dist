@@ -40,6 +40,13 @@ LivingWorld.Travel.EndHour = 18
 LivingWorld.Hunts.Enable = 1
 LivingWorld.Hunts.MinimumLevel = 10
 
+# Geographic range used when a Huntmaster chooses level-appropriate hunting grounds.
+# 0 = Local Region: only zones explicitly mapped to that Huntmaster.
+# 1 = Continent: anywhere on the Huntmaster's logical continent.
+# 2 = World: any enabled level-appropriate hunt zone.
+# Local regions are data-driven in 906_hunt_local_regions.sql and may overlap.
+LivingWorld.Hunts.SearchScope = 0
+
 # Multiplier applied to the eventual level-appropriate Hunt completion XP.
 # The reward code is intentionally deferred while the encounter loop is tested,
 # but the balance control is established now rather than hard-coded later.

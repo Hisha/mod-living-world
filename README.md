@@ -1,3 +1,12 @@
+## 0.5.2-dev Hunt tuning and scope
+
+- Fixes first-completion Hunt statistics persistence by writing `lw_hunt_stats` synchronously before confirming turn-in.
+- Adds level-banded prey health scaling. The existing hunt multipliers remain the level-70+ ceiling; lower levels scale down automatically (10-19: 1.5x ambush / 3.0x final with the default 4x/6x hunt values).
+- Keeps prey visually Elite, but hunt health scaling now owns the health pool instead of allowing the cloned elite template health to override it.
+- Adds `LivingWorld.Hunts.SearchScope`: `0=Local Region`, `1=Continent`, `2=World` (default).
+- Adds data-driven, overlapping Huntmaster local-region mappings in `906_hunt_local_regions.sql`.
+- Adds logical continent IDs so BC-map starting zones and Quel'Danas are grouped with their actual Azeroth continent rather than map 530/Outland.
+
 # Living World
 
 Living World (LW) is an AzerothCore module for SQL-authored dynamic world activity: staged invasions, reusable route-driven movement, traveling civilian events, and calendar-driven world events. It requires no client modification and no AzerothCore core patch.

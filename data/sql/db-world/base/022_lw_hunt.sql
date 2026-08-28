@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS `lw_hunt_zone` (
   `id` INT UNSIGNED NOT NULL,
   `zone_id` INT UNSIGNED NOT NULL,
   `map_id` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  `continent_id` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '1=Eastern Kingdoms, 2=Kalimdor, 3=Outland, 4=Northrend',
   `name` VARCHAR(100) NOT NULL,
   `min_level` TINYINT UNSIGNED NOT NULL DEFAULT 1,
   `max_level` TINYINT UNSIGNED NOT NULL DEFAULT 80,
@@ -58,6 +59,7 @@ CREATE TABLE IF NOT EXISTS `lw_hunt_giver` (
   `creature_entry` INT UNSIGNED NOT NULL,
   `city_name` VARCHAR(80) NOT NULL,
   `map_id` SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  `continent_id` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '1=Eastern Kingdoms, 2=Kalimdor, 3=Outland, 4=Northrend',
   `x` FLOAT NOT NULL,
   `y` FLOAT NOT NULL,
   `z` FLOAT NOT NULL,
@@ -78,4 +80,18 @@ CREATE TABLE IF NOT EXISTS `lw_hunt_guard_locator` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_lw_hunt_guard_locator` (`guard_creature_entry`),
   KEY `idx_lw_hunt_guard_giver` (`hunt_giver_id`,`enabled`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Local hunt regions are intentionally data-driven and may overlap. Each row
+-- says that a Huntmaster may use a zone when SearchScope=LocalRegion.
+CREATE TABLE IF NOT EXISTS `lw_hunt_local_region_zone` (
+  `id` INT UNSIGNED NOT NULL,
+  `hunt_giver_id` INT UNSIGNED NOT NULL,
+  `zone_id` INT UNSIGNED NOT NULL,
+  `enabled` TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  `comment` VARCHAR(255) NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_lw_hunt_local_region_zone` (`hunt_giver_id`,`zone_id`),
+  KEY `idx_lw_hunt_local_region_giver` (`hunt_giver_id`,`enabled`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
