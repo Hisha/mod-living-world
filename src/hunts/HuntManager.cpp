@@ -3,6 +3,7 @@
 #include "Chat.h"
 #include "Creature.h"
 #include "GameObject.h"
+#include "Formulas.h"
 #include "LwCreatureTemplateManager.h"
 #include "DatabaseEnv.h"
 #include "DBCStores.h"
@@ -58,6 +59,7 @@ void HuntManager::LoadDefinitions()
 {
     _hunts.clear();
     _preyAbilities.clear();
+    _abilityTimers.clear();
     _zones.clear();
     _finalLocations.clear();
     _giverEntries.clear();
@@ -89,12 +91,14 @@ void HuntManager::LoadDefinitions()
     {
         do
         {
-            Field* f=result->Fetch(); HuntPreyAbilityDefinition a;
-            a.Id=f[0].Get<uint32>(); a.PreyId=f[1].Get<uint32>(); a.SpellId=f[2].Get<uint32>(); a.Target=f[3].Get<uint8>();
-            a.InitialMinMs=f[4].Get<uint32>(); a.InitialMaxMs=f[5].Get<uint32>(); a.CooldownMinMs=f[6].Get<uint32>(); a.CooldownMaxMs=f[7].Get<uint32>();
-            a.ChancePct=f[8].Get<uint8>(); a.EncounterMask=f[9].Get<uint8>(); a.Enabled=f[10].Get<uint8>()!=0;
-            _preyAbilities[a.PreyId].push_back(a);
-        } while(result->NextRow());
+            Field* f = result->Fetch();
+            HuntPreyAbilityDefinition d;
+            d.Id = f[0].Get<uint32>(); d.PreyId = f[1].Get<uint32>(); d.SpellId = f[2].Get<uint32>(); d.Target = f[3].Get<uint8>();
+            d.InitialMinMs = f[4].Get<uint32>(); d.InitialMaxMs = f[5].Get<uint32>();
+            d.CooldownMinMs = f[6].Get<uint32>(); d.CooldownMaxMs = f[7].Get<uint32>();
+            d.ChancePct = f[8].Get<uint8>(); d.EncounterMask = f[9].Get<uint8>(); d.Enabled = f[10].Get<uint8>() != 0;
+            _preyAbilities[d.PreyId].push_back(d);
+        } while (result->NextRow());
     }
 
     if (QueryResult result = WorldDatabase.Query(
@@ -142,7 +146,12 @@ void HuntManager::LoadDefinitions()
         do { Field* f=result->Fetch(); _giverLocalZones[f[0].Get<uint32>()].push_back(f[1].Get<uint32>()); } while(result->NextRow());
     }
 
-    LOG_INFO("server.loading", "[LW Hunt] Loaded {} hunt(s), {} zone(s), {} final location(s), {} Huntmaster(s), and {} guard locator entry(s).", _hunts.size(), _zones.size(), _finalLocations.size(), _giverEntries.size(), _guardLocators.size());
+    size_t abilityCount = 0;
+    for (auto const& [preyId, abilities] : _preyAbilities)
+        abilityCount += abilities.size();
+
+    LOG_INFO("server.loading", "[LW Hunt] Loaded {} prey definition(s), {} prey ability row(s), {} zone(s), {} final location(s), {} Huntmaster(s), and {} guard locator entry(s).",
+        _hunts.size(), abilityCount, _zones.size(), _finalLocations.size(), _giverEntries.size(), _guardLocators.size());
 }
 
 void HuntManager::Initialize()
@@ -175,8 +184,8 @@ void HuntManager::SaveRuntime(HuntRuntime const& r)
 void HuntManager::DeleteRuntime(uint32 guid)
 {
     CharacterDatabase.Execute("DELETE FROM `lw_hunt_runtime` WHERE `guid`={}", guid);
-    _runtimes.erase(guid);
     _abilityTimers.erase(guid);
+    _runtimes.erase(guid);
 }
 
 bool HuntManager::HasActiveHunt(Player const* player) const { return GetRuntime(player)!=nullptr; }
@@ -349,6 +358,7 @@ void HuntManager::OnCreatureKill(Player* player, Creature* killed)
 
     if(r.ActivePreyGuid==killed->GetGUID())
     {
+        _abilityTimers.erase(r.CharacterGuid);
         r.ActivePreyGuid.Clear();
         if(r.ActivePreyFinal)
         {
@@ -359,6 +369,14 @@ void HuntManager::OnCreatureKill(Player* player, Creature* killed)
     }
 
     if(r.State!=HuntState::Tracking || player->GetZoneId()!=r.ZoneId) return;
+
+    // Ordinary tracking progress only comes from creatures that are non-grey
+    // to this hunter. This mirrors the normal XP color rules without depending
+    // on whether the player has XP gain disabled or on the server's XP rate.
+    // Hunt prey is handled above and is intentionally exempt from this filter.
+    if (Acore::XP::GetColorCode(player->GetLevel(), killed->GetLevel()) == XP_GRAY)
+        return;
+
     std::string ignored; AddProgress(player, static_cast<uint8>(urand(3,7)), ignored);
 }
 
@@ -392,143 +410,6 @@ HuntFinalLocationDefinition const* HuntManager::GetFinalLocation(uint32 finalLoc
         if (location.Id == finalLocationId)
             return &location;
     return nullptr;
-}
-
-
-bool HuntManager::AddFinalLocationAtPlayer(Player* player, std::string& message)
-{
-    if (!player)
-    {
-        message = "[LW Hunt] This command must be used in game.";
-        return false;
-    }
-
-    uint32 const zoneId = player->GetZoneId();
-    uint16 const mapId = player->GetMapId();
-    if (!zoneId)
-    {
-        message = "[LW Hunt] Cannot create a final location here because the current zone could not be resolved.";
-        return false;
-    }
-
-    uint32 nextId = 1;
-    if (QueryResult result = WorldDatabase.Query("SELECT COALESCE(MAX(`id`),0)+1 FROM `lw_hunt_final_location`"))
-        nextId = result->Fetch()[0].Get<uint32>();
-
-    std::ostringstream insertSql;
-    insertSql << "INSERT INTO `lw_hunt_final_location` (`id`,`zone_id`,`map_id`,`x`,`y`,`z`,`orientation`,`location_name`,`weight`,`enabled`,`comment`) VALUES ("
-              << nextId << ',' << zoneId << ',' << mapId << ','
-              << player->GetPositionX() << ',' << player->GetPositionY() << ',' << player->GetPositionZ() << ',' << player->GetOrientation()
-              << ",'',100,1,'Added in-game with .lw hunt set final point')";
-    WorldDatabase.DirectExecute(insertSql.str().c_str());
-
-    LoadDefinitions();
-
-    std::string zoneName = "Unknown zone";
-    if (AreaTableEntry const* zone = sAreaTableStore.LookupEntry(zoneId))
-    {
-        std::string const localized = zone->area_name[player->GetSession()->GetSessionDbcLocale()];
-        if (!localized.empty())
-            zoneName = localized;
-    }
-
-    std::string areaName;
-    if (Map* map = player->GetMap())
-    {
-        uint32 const areaId = map->GetAreaId(player->GetPhaseMask(), player->GetPositionX(), player->GetPositionY(), player->GetPositionZ());
-        if (AreaTableEntry const* area = sAreaTableStore.LookupEntry(areaId))
-            areaName = area->area_name[player->GetSession()->GetSessionDbcLocale()];
-    }
-
-    bool const configuredZone = GetZone(zoneId) != nullptr;
-    std::ostringstream out;
-    out << "[LW Hunt] Final hunt location created. ID: " << nextId
-        << " | Zone: " << zoneName << " (" << zoneId << ")"
-        << " | Map: " << mapId
-        << " | XYZ: " << player->GetPositionX() << ", " << player->GetPositionY() << ", " << player->GetPositionZ()
-        << " | O: " << player->GetOrientation();
-    if (!areaName.empty())
-        out << " | Area: " << areaName;
-    if (!configuredZone)
-        out << " | WARNING: this zone is not currently defined/enabled in lw_hunt_zone, so the point will not enter Hunt rotation yet.";
-    message = out.str();
-    return true;
-}
-
-std::string HuntManager::BuildFinalLocationList(Player const* player) const
-{
-    if (!player)
-        return "[LW Hunt] This command must be used in game.";
-
-    uint32 const zoneId = player->GetZoneId();
-    std::string zoneName = "Unknown zone";
-    if (AreaTableEntry const* zone = sAreaTableStore.LookupEntry(zoneId))
-    {
-        std::string const localized = zone->area_name[player->GetSession()->GetSessionDbcLocale()];
-        if (!localized.empty())
-            zoneName = localized;
-    }
-
-    std::ostringstream out;
-    out << "[LW Hunt] Final locations for " << zoneName << " (zone " << zoneId << "):";
-    uint32 count = 0;
-    for (HuntFinalLocationDefinition const& location : _finalLocations)
-    {
-        if (location.ZoneId != zoneId || !location.Enabled)
-            continue;
-
-        out << "\n  " << location.Id << " - "
-            << location.X << ", " << location.Y << ", " << location.Z
-            << " (map " << location.MapId << ")";
-        ++count;
-    }
-
-    if (!count)
-        out << "\n  No enabled final locations are currently defined for this zone.";
-    else
-        out << "\n[LW Hunt] " << count << " enabled final location(s).";
-    return out.str();
-}
-
-bool HuntManager::DeleteFinalLocation(uint32 locationId, std::string& message)
-{
-    QueryResult result = WorldDatabase.Query(
-        "SELECT `zone_id`,`map_id`,`x`,`y`,`z` FROM `lw_hunt_final_location` WHERE `id`={}", locationId);
-    if (!result)
-    {
-        message = "[LW Hunt] Final location " + std::to_string(locationId) + " does not exist.";
-        return false;
-    }
-
-    Field* fields = result->Fetch();
-    uint32 const zoneId = fields[0].Get<uint32>();
-    uint16 const mapId = fields[1].Get<uint16>();
-    float const x = fields[2].Get<float>();
-    float const y = fields[3].Get<float>();
-    float const z = fields[4].Get<float>();
-
-    std::string const deleteSql = "DELETE FROM `lw_hunt_final_location` WHERE `id`=" + std::to_string(locationId);
-    WorldDatabase.DirectExecute(deleteSql.c_str());
-    LoadDefinitions();
-
-    uint32 remaining = 0;
-    if (QueryResult countResult = WorldDatabase.Query(
-        "SELECT COUNT(*) FROM `lw_hunt_final_location` WHERE `zone_id`={} AND `enabled`=1", zoneId))
-        remaining = countResult->Fetch()[0].Get<uint32>();
-
-    std::string zoneName = "zone " + std::to_string(zoneId);
-    if (HuntZoneDefinition const* zone = GetZone(zoneId))
-        zoneName = zone->Name;
-
-    std::ostringstream out;
-    out << "[LW Hunt] Final location " << locationId << " deleted from " << zoneName
-        << " (map " << mapId << ", " << x << ", " << y << ", " << z << ").";
-    if (!remaining)
-        out << " WARNING: This was the last enabled final location for the zone. The zone will no longer be eligible for hunts.";
-    else
-        out << " " << remaining << " enabled final location(s) remain in the zone.";
-    message = out.str();
-    return true;
 }
 
 std::string HuntManager::ResolveFinalLocationName(Player* player, HuntFinalLocationDefinition const& location) const
@@ -677,6 +558,7 @@ bool HuntManager::SpawnPrey(Player* player, HuntRuntime& r, bool finalEncounter,
            active->GetDistance2d(player)>120.0f || std::fabs(active->GetPositionZ()-player->GetPositionZ())>25.0f)
         {
             if(active) active->DespawnOrUnsummon();
+            _abilityTimers.erase(r.CharacterGuid);
             r.ActivePreyGuid.Clear();
             r.ActivePreyFinal=false;
             SaveRuntime(r);
@@ -759,6 +641,70 @@ bool HuntManager::SpawnPrey(Player* player, HuntRuntime& r, bool finalEncounter,
     message=finalEncounter?"Final prey spawned.":"Ambush spawned."; return true;
 }
 
+void HuntManager::InitializeAbilityTimers(HuntRuntime const& runtime, bool finalEncounter)
+{
+    auto& timers = _abilityTimers[runtime.CharacterGuid];
+    timers.clear();
+
+    auto abilityIt = _preyAbilities.find(runtime.PreyId);
+    if (abilityIt == _preyAbilities.end())
+        return;
+
+    uint8 const encounterBit = finalEncounter ? 2 : 1;
+    for (HuntPreyAbilityDefinition const& ability : abilityIt->second)
+    {
+        if (!ability.Enabled || !(ability.EncounterMask & encounterBit))
+            continue;
+
+        uint32 const minMs = std::min(ability.InitialMinMs, ability.InitialMaxMs);
+        uint32 const maxMs = std::max(ability.InitialMinMs, ability.InitialMaxMs);
+        timers[ability.Id] = minMs == maxMs ? minMs : urand(minMs, maxMs);
+    }
+}
+
+void HuntManager::UpdatePreyAbilities(Player* player, HuntRuntime& runtime, Creature* prey, uint32 elapsedMs)
+{
+    if (!player || !prey || !prey->IsAlive() || !prey->IsInCombat())
+        return;
+
+    auto abilityIt = _preyAbilities.find(runtime.PreyId);
+    if (abilityIt == _preyAbilities.end())
+        return;
+
+    auto timerOwner = _abilityTimers.find(runtime.CharacterGuid);
+    if (timerOwner == _abilityTimers.end())
+    {
+        InitializeAbilityTimers(runtime, runtime.ActivePreyFinal);
+        timerOwner = _abilityTimers.find(runtime.CharacterGuid);
+        if (timerOwner == _abilityTimers.end())
+            return;
+    }
+
+    uint8 const encounterBit = runtime.ActivePreyFinal ? 2 : 1;
+    for (HuntPreyAbilityDefinition const& ability : abilityIt->second)
+    {
+        if (!ability.Enabled || !(ability.EncounterMask & encounterBit) || !ability.SpellId)
+            continue;
+
+        uint32& timer = timerOwner->second[ability.Id];
+        if (timer > elapsedMs)
+        {
+            timer -= elapsedMs;
+            continue;
+        }
+
+        if (ability.ChancePct >= 100 || urand(1, 100) <= ability.ChancePct)
+        {
+            Unit* target = ability.Target == 1 ? static_cast<Unit*>(prey) : static_cast<Unit*>(player);
+            prey->CastSpell(target, ability.SpellId, false);
+        }
+
+        uint32 const minMs = std::min(ability.CooldownMinMs, ability.CooldownMaxMs);
+        uint32 const maxMs = std::max(ability.CooldownMinMs, ability.CooldownMaxMs);
+        timer = minMs == maxMs ? minMs : urand(minMs, maxMs);
+    }
+}
+
 void HuntManager::LocateFinal(Player* player, HuntRuntime& r)
 {
     HuntFinalLocationDefinition const* l=SelectFinalLocation(r); if(!l) return;
@@ -798,71 +744,9 @@ bool HuntManager::ForceFinal(Player* player, std::string& message)
     return true;
 }
 
-void HuntManager::InitializeAbilityTimers(HuntRuntime const& runtime, bool finalEncounter)
-{
-    auto& timers = _abilityTimers[runtime.CharacterGuid];
-    timers.clear();
-    auto it = _preyAbilities.find(runtime.PreyId);
-    if (it == _preyAbilities.end())
-        return;
-
-    uint8 const encounterBit = finalEncounter ? 2 : 1;
-    for (HuntPreyAbilityDefinition const& ability : it->second)
-    {
-        if (!(ability.EncounterMask & encounterBit))
-            continue;
-        uint32 const hi = std::max(ability.InitialMinMs, ability.InitialMaxMs);
-        uint32 const lo = std::min(ability.InitialMinMs, ability.InitialMaxMs);
-        timers[ability.Id] = hi > lo ? urand(lo, hi) : lo;
-    }
-}
-
-void HuntManager::UpdatePreyAbilities(Player* player, HuntRuntime& runtime, Creature* prey, uint32 elapsedMs)
-{
-    if (!player || !prey || !prey->IsAlive() || !prey->IsInCombat())
-        return;
-
-    auto abilitiesIt = _preyAbilities.find(runtime.PreyId);
-    if (abilitiesIt == _preyAbilities.end())
-        return;
-
-    uint8 const encounterBit = runtime.ActivePreyFinal ? 2 : 1;
-    auto& timers = _abilityTimers[runtime.CharacterGuid];
-    for (HuntPreyAbilityDefinition const& ability : abilitiesIt->second)
-    {
-        if (!(ability.EncounterMask & encounterBit) || !ability.SpellId)
-            continue;
-
-        uint32& timer = timers[ability.Id];
-        if (timer > elapsedMs)
-        {
-            timer -= elapsedMs;
-            continue;
-        }
-
-        uint32 const hi = std::max(ability.CooldownMinMs, ability.CooldownMaxMs);
-        uint32 const lo = std::min(ability.CooldownMinMs, ability.CooldownMaxMs);
-        timer = hi > lo ? urand(lo, hi) : lo;
-
-        if (ability.ChancePct < 100 && urand(1, 100) > ability.ChancePct)
-            continue;
-        if (prey->IsNonMeleeSpellCast(false))
-            continue;
-
-        Unit* target = ability.Target == 1 ? static_cast<Unit*>(prey) : prey->GetVictim();
-        if (!target)
-            target = player;
-        prey->CastSpell(target, ability.SpellId, false);
-        break; // at most one special ability per update tick
-    }
-}
-
 void HuntManager::Update(uint32 diff)
 {
-    if(!_enabled) return;
-    if(_updateTimerMs>diff){_updateTimerMs-=diff;return;}
-    uint32 const elapsedMs = 250;
-    _updateTimerMs=250;
+    if(!_enabled) return; if(_updateTimerMs>diff){_updateTimerMs-=diff;return;} _updateTimerMs=250;
     for(auto& [guid,r]:_runtimes)
     {
         Player* p=ObjectAccessor::FindConnectedPlayer(ObjectGuid::Create<HighGuid::Player>(guid)); if(!p) continue;
@@ -871,14 +755,24 @@ void HuntManager::Update(uint32 diff)
             EnsureFinalActivator(p,r);
 
         if(r.ActivePreyGuid.IsEmpty()) continue;
-        Creature* prey=ObjectAccessor::GetCreature(*p,r.ActivePreyGuid); if(!prey){r.ActivePreyGuid.Clear();continue;}
+        Creature* prey=ObjectAccessor::GetCreature(*p,r.ActivePreyGuid);
+        if(!prey)
+        {
+            _abilityTimers.erase(r.CharacterGuid);
+            r.ActivePreyGuid.Clear();
+            continue;
+        }
+
         HuntDefinition const* h=GetDefinition(r.PreyId); if(!h) continue;
-        UpdatePreyAbilities(p, r, prey, elapsedMs);
+        UpdatePreyAbilities(p, r, prey, 250);
+
         if(!r.ActivePreyFinal && prey->GetHealthPct()<=h->EscapeHealthPct)
         {
             prey->CombatStop(true); prey->SetFlag(UNIT_FIELD_FLAGS,UNIT_FLAG_NON_ATTACKABLE|UNIT_FLAG_IMMUNE_TO_PC);
             ChatHandler(p->GetSession()).PSendSysMessage("|cffffff00[LW Hunt]|r {} breaks away and disappears. Continue tracking it.",h->Name);
-            prey->DespawnOrUnsummon(Milliseconds(1500)); r.ActivePreyGuid.Clear(); SaveRuntime(r);
+            prey->DespawnOrUnsummon(Milliseconds(1500));
+            _abilityTimers.erase(r.CharacterGuid);
+            r.ActivePreyGuid.Clear(); SaveRuntime(r);
         }
     }
 }

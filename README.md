@@ -1,33 +1,32 @@
-## 0.6.0-dev Legendary beast prey
+## 0.5.4-dev Hunt prey schema correction and expanded roster
 
-Hunts now use a dedicated `lw_hunt_prey` catalog and a data-driven `lw_hunt_prey_ability` table. The first production prey are Ashfang, Silkmaw, and Gorehide (levels 10-19). Silkmaw uses Web/Poison and Gorehide uses Charge through existing 3.3.5 spells. Prey and hunting zones remain independently selected.
+- Corrects the Hunt prey loader to use the canonical `lw_hunt_prey` table.
+- Corrects active-hunt persistence to use the canonical `prey_id` runtime column.
+- Loads and executes `lw_hunt_prey_ability` rows during both ambush and final encounters.
+- Preserves the non-grey/XP-eligible kill requirement for ordinary tracking progress.
+- Expands `910_beast_prey.sql` to eight prey: Ashfang, Silkmaw, Gorehide, Whiteclaw, Tidefang, Stonegut, Sootfang, and Nightfang.
+- Keeps Silkmaw's Web/Poison and Gorehide's Charge as the first data-driven prey abilities.
 
-**Upgrade note:** 0.6.0 renames the character runtime column `hunt_id` to `prey_id`. Finish or abandon active hunts before applying the upgrade SQL.
-
-## 0.5.3-dev Hunt final-location authoring
-
-Adds in-game GM/debug authoring commands for Hunt final crystal sites:
-
-- `.lw hunt set final point` stores the GM's current map, zone, XYZ and orientation directly in `lw_hunt_final_location`.
-- `.lw hunt set final list` lists enabled final sites in the GM's current zone.
-- `.lw hunt set final delete <id>` removes a site and warns when the last enabled site for a zone is removed.
-- Authoring commands require both Game Master mode and `LivingWorld.Debug = 1`.
-- Added/deleted sites are reloaded into the live Hunt selection pool immediately; no world restart is required.
-
-## 0.5.2-dev Hunt tuning and scope
+## 0.5.3-dev Hunt prey expansion and tracking eligibility
 
 - Fixes first-completion Hunt statistics persistence by writing `lw_hunt_stats` synchronously before confirming turn-in.
 - Adds level-banded prey health scaling. The existing hunt multipliers remain the level-70+ ceiling; lower levels scale down automatically (10-19: 1.5x ambush / 3.0x final with the default 4x/6x hunt values).
 - Keeps prey visually Elite, but hunt health scaling now owns the health pool instead of allowing the cloned elite template health to override it.
-- Adds `LivingWorld.Hunts.SearchScope`: `0=Local Region`, `1=Continent`, `2=World` (default).
-- Adds data-driven, overlapping Huntmaster local-region mappings in `906_hunt_local_regions.sql`.
+- Adds `LivingWorld.Hunts.SearchScope`: `0=Local Region`, `1=Continent`, `2=World` (configured default in this package is `0=Local Region`).
+- Adds data-driven, overlapping Huntmaster local-region mappings in `909_hunt_local_regions.sql`.
 - Adds logical continent IDs so BC-map starting zones and Quel'Danas are grouped with their actual Azeroth continent rather than map 530/Outland.
 
 # Living World
 
 Living World (LW) is an AzerothCore module for SQL-authored dynamic world activity: staged invasions, reusable route-driven movement, traveling civilian events, and calendar-driven world events. It requires no client modification and no AzerothCore core patch.
 
-**Current development version:** `0.5.1-dev`
+### 0.5.3 Hunt changes
+
+- Ordinary kills only advance Hunt tracking when the creature is non-grey under AzerothCore/WotLK XP color rules.
+- Hunt prey kills remain exempt from the ordinary tracking eligibility check.
+- Adds the non-grey/XP-eligibility tracking rule; prey content is maintained in `910_beast_prey.sql`.
+
+**Current development version:** `0.5.4-dev`
 
 
 ## Repository layout
@@ -139,7 +138,7 @@ Useful GM/debug commands:
 ```
 
 
-## Hunt system (0.5.1-dev)
+## Hunt system (0.5.4-dev)
 
 The Hunt world rollout now includes 10 permanent Huntmasters (the eight racial capitals plus neutral Shattrath and Dalaran) and three curated final encounter sites for every enabled Eastern Kingdoms hunt zone. Final-site sub-area names are resolved from AreaTable.dbc at runtime when no explicit location name is authored.
 
