@@ -1,5 +1,5 @@
 -- Living World Hunt/Prey subsystem - canonical schema
-CREATE TABLE IF NOT EXISTS `lw_hunt` (
+CREATE TABLE IF NOT EXISTS `lw_hunt_prey` (
   `id` INT UNSIGNED NOT NULL,
   `name` VARCHAR(100) NOT NULL,
   `min_level` TINYINT UNSIGNED NOT NULL DEFAULT 10,
@@ -14,7 +14,26 @@ CREATE TABLE IF NOT EXISTS `lw_hunt` (
   `enabled` TINYINT UNSIGNED NOT NULL DEFAULT 1,
   `comment` VARCHAR(255) NULL,
   PRIMARY KEY (`id`),
-  KEY `idx_lw_hunt_level` (`min_level`,`max_level`,`enabled`)
+  KEY `idx_lw_hunt_prey_level` (`min_level`,`max_level`,`enabled`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Optional data-driven combat abilities for prey. The Hunt runtime casts these
+-- from the active prey creature; no prey-specific C++ branches are required.
+CREATE TABLE IF NOT EXISTS `lw_hunt_prey_ability` (
+  `id` INT UNSIGNED NOT NULL,
+  `prey_id` INT UNSIGNED NOT NULL,
+  `spell_id` INT UNSIGNED NOT NULL,
+  `target` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=victim,1=self',
+  `initial_min_ms` INT UNSIGNED NOT NULL DEFAULT 0,
+  `initial_max_ms` INT UNSIGNED NOT NULL DEFAULT 0,
+  `cooldown_min_ms` INT UNSIGNED NOT NULL DEFAULT 10000,
+  `cooldown_max_ms` INT UNSIGNED NOT NULL DEFAULT 10000,
+  `chance_pct` TINYINT UNSIGNED NOT NULL DEFAULT 100,
+  `encounter_mask` TINYINT UNSIGNED NOT NULL DEFAULT 3 COMMENT '1=ambush,2=final,3=both',
+  `enabled` TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  `comment` VARCHAR(255) NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_lw_hunt_prey_ability` (`prey_id`,`enabled`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- World hunting grounds are independent of prey definitions. Any Huntmaster

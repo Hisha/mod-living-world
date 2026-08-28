@@ -1561,7 +1561,7 @@ private:
         }
 
         handler->SendSysMessage("Living World");
-        handler->SendSysMessage("Version: 0.5.3-dev");
+        handler->SendSysMessage("Version: 0.6.0-dev");
         handler->PSendSysMessage("Scheduler: {}", schedulerState);
         handler->PSendSysMessage("Debug: {}", livingWorldConfig.GetConfigValue<bool>(LwConfig::Debug) ? "enabled" : "disabled");
         handler->PSendSysMessage("Active runtimes: {}", sInvasionRuntimeMgr.GetActiveRuntimeCount());

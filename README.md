@@ -1,3 +1,9 @@
+## 0.6.0-dev Legendary beast prey
+
+Hunts now use a dedicated `lw_hunt_prey` catalog and a data-driven `lw_hunt_prey_ability` table. The first production prey are Ashfang, Silkmaw, and Gorehide (levels 10-19). Silkmaw uses Web/Poison and Gorehide uses Charge through existing 3.3.5 spells. Prey and hunting zones remain independently selected.
+
+**Upgrade note:** 0.6.0 renames the character runtime column `hunt_id` to `prey_id`. Finish or abandon active hunts before applying the upgrade SQL.
+
 ## 0.5.3-dev Hunt final-location authoring
 
 Adds in-game GM/debug authoring commands for Hunt final crystal sites:

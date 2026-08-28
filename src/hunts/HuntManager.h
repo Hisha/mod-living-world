@@ -29,6 +29,21 @@ enum class HuntState : uint8
     ReadyToTurnIn = 3
 };
 
+struct HuntPreyAbilityDefinition
+{
+    uint32 Id = 0;
+    uint32 PreyId = 0;
+    uint32 SpellId = 0;
+    uint8 Target = 0; // 0=victim, 1=self
+    uint32 InitialMinMs = 0;
+    uint32 InitialMaxMs = 0;
+    uint32 CooldownMinMs = 10000;
+    uint32 CooldownMaxMs = 10000;
+    uint8 ChancePct = 100;
+    uint8 EncounterMask = 3; // 1=ambush, 2=final, 3=both
+    bool Enabled = false;
+};
+
 struct HuntDefinition
 {
     uint32 Id = 0;
@@ -89,7 +104,7 @@ struct HuntGiverDefinition
 struct HuntRuntime
 {
     uint32 CharacterGuid = 0;
-    uint32 HuntId = 0;
+    uint32 PreyId = 0;
     uint32 GiverEntry = 0;
     uint32 GiverSpawnId = 0;
     uint32 ZoneId = 0;
@@ -120,7 +135,7 @@ public:
 
     bool HasActiveHunt(Player const* player) const;
     HuntRuntime const* GetRuntime(Player const* player) const;
-    HuntDefinition const* GetDefinition(uint32 huntId) const;
+    HuntDefinition const* GetDefinition(uint32 preyId) const;
 
     bool RequestHunt(Player* player, Creature* giver, std::string& message);
     bool AbandonHunt(Player* player, std::string& message);
@@ -160,6 +175,8 @@ private:
     void RemoveFinalActivator(Player* player, HuntRuntime& runtime);
     void LocateFinal(Player* player, HuntRuntime& runtime);
     uint8 GetNextAmbushThreshold(HuntRuntime const& runtime, HuntDefinition const& hunt) const;
+    void InitializeAbilityTimers(HuntRuntime const& runtime, bool finalEncounter);
+    void UpdatePreyAbilities(Player* player, HuntRuntime& runtime, Creature* prey, uint32 elapsedMs);
 
     bool _enabled = false;
     bool _debug = false;
@@ -169,6 +186,8 @@ private:
     uint32 _updateTimerMs = 0;
 
     std::unordered_map<uint32, HuntDefinition> _hunts;
+    std::unordered_map<uint32, std::vector<HuntPreyAbilityDefinition>> _preyAbilities;
+    std::unordered_map<uint32, std::unordered_map<uint32, uint32>> _abilityTimers;
     std::vector<HuntZoneDefinition> _zones;
     std::vector<HuntFinalLocationDefinition> _finalLocations;
     std::unordered_map<uint32, uint32> _giverEntries;
