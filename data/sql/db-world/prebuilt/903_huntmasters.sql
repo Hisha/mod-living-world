@@ -11,6 +11,8 @@ SET @OG_ENTRY := 14999984;
 SET @TB_ENTRY := 14999985;
 SET @UC_ENTRY := 14999986;
 SET @SM_ENTRY := 14999987;
+SET @SH_ENTRY := 14999988;
+SET @DA_ENTRY := 14999989;
 
 -- Existing race/city-appropriate visual shells.
 SET @SW_BASE := 68;     -- Stormwind City Guard
@@ -21,9 +23,11 @@ SET @OG_BASE := 3296;   -- Orgrimmar Grunt
 SET @TB_BASE := 3084;   -- Bluffwatcher
 SET @UC_BASE := 5624;   -- Undercity Guardian
 SET @SM_BASE := 16222;  -- Silvermoon City Guardian
+SET @SH_BASE := 19687;  -- Shattrath City Peacekeeper
+SET @DA_BASE := 30659;  -- Violet Hold Guard (Dalaran)
 
-DELETE FROM `creature_template_model` WHERE `CreatureID` IN (@SW_ENTRY,@IF_ENTRY,@DN_ENTRY,@EX_ENTRY,@OG_ENTRY,@TB_ENTRY,@UC_ENTRY,@SM_ENTRY);
-DELETE FROM `creature_template` WHERE `entry` IN (@SW_ENTRY,@IF_ENTRY,@DN_ENTRY,@EX_ENTRY,@OG_ENTRY,@TB_ENTRY,@UC_ENTRY,@SM_ENTRY);
+DELETE FROM `creature_template_model` WHERE `CreatureID` IN (@SW_ENTRY,@IF_ENTRY,@DN_ENTRY,@EX_ENTRY,@OG_ENTRY,@TB_ENTRY,@UC_ENTRY,@SM_ENTRY,@SH_ENTRY,@DA_ENTRY);
+DELETE FROM `creature_template` WHERE `entry` IN (@SW_ENTRY,@IF_ENTRY,@DN_ENTRY,@EX_ENTRY,@OG_ENTRY,@TB_ENTRY,@UC_ENTRY,@SM_ENTRY,@SH_ENTRY,@DA_ENTRY);
 
 INSERT INTO `creature_template` (
     `entry`,`difficulty_entry_1`,`difficulty_entry_2`,`difficulty_entry_3`,`KillCredit1`,`KillCredit2`,`name`,`subname`,`IconName`,`gossip_menu_id`,
@@ -44,7 +48,9 @@ FROM (
     SELECT @OG_ENTRY,@OG_BASE,'Huntmaster Gorrak' UNION ALL
     SELECT @TB_ENTRY,@TB_BASE,'Huntmaster Tahu' UNION ALL
     SELECT @UC_ENTRY,@UC_BASE,'Huntmaster Morcant' UNION ALL
-    SELECT @SM_ENTRY,@SM_BASE,'Huntmistress Vaelith'
+    SELECT @SM_ENTRY,@SM_BASE,'Huntmistress Vaelith' UNION ALL
+    SELECT @SH_ENTRY,@SH_BASE,'Huntmaster Raleth' UNION ALL
+    SELECT @DA_ENTRY,@DA_BASE,'Huntmaster Varyn'
 ) m
 JOIN `creature_template` b ON b.`entry`=m.base_entry;
 
@@ -54,37 +60,42 @@ FROM (
     SELECT @SW_ENTRY entry,@SW_BASE base_entry UNION ALL SELECT @IF_ENTRY,@IF_BASE UNION ALL
     SELECT @DN_ENTRY,@DN_BASE UNION ALL SELECT @EX_ENTRY,@EX_BASE UNION ALL
     SELECT @OG_ENTRY,@OG_BASE UNION ALL SELECT @TB_ENTRY,@TB_BASE UNION ALL
-    SELECT @UC_ENTRY,@UC_BASE UNION ALL SELECT @SM_ENTRY,@SM_BASE
+    SELECT @UC_ENTRY,@UC_BASE UNION ALL SELECT @SM_ENTRY,@SM_BASE UNION ALL
+    SELECT @SH_ENTRY,@SH_BASE UNION ALL SELECT @DA_ENTRY,@DA_BASE
 ) m
 JOIN `creature_template_model` ctm ON ctm.`CreatureID`=m.base_entry;
 
 -- Remove/recreate our permanent spawns. GUIDs are allocated above the current
 -- database maximum at apply time so the module does not claim a fixed core GUID range.
-DELETE FROM `creature` WHERE `id` IN (@SW_ENTRY,@IF_ENTRY,@DN_ENTRY,@EX_ENTRY,@OG_ENTRY,@TB_ENTRY,@UC_ENTRY,@SM_ENTRY);
+DELETE FROM `creature` WHERE `id` IN (@SW_ENTRY,@IF_ENTRY,@DN_ENTRY,@EX_ENTRY,@OG_ENTRY,@TB_ENTRY,@UC_ENTRY,@SM_ENTRY,@SH_ENTRY,@DA_ENTRY);
 SET @LW_HUNTMASTER_CGUID := (SELECT COALESCE(MAX(`guid`),0) FROM `creature`);
 INSERT INTO `creature`
 (`guid`,`id`,`map`,`zoneId`,`areaId`,`spawnMask`,`phaseMask`,`equipment_id`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`wander_distance`,`currentwaypoint`,`curhealth`,`curmana`,`MovementType`,`npcflag`,`unit_flags`,`dynamicflags`,`ScriptName`,`VerifiedBuild`,`CreateObject`,`Comment`) VALUES
-(@LW_HUNTMASTER_CGUID+1,@SW_ENTRY,0,0,0,1,1,0,-8831.55,628.72,94.02,3.14,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Stormwind'),
-(@LW_HUNTMASTER_CGUID+2,@IF_ENTRY,0,0,0,1,1,0,-4955.20,-1016.10,501.82,1.55,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Ironforge'),
-(@LW_HUNTMASTER_CGUID+3,@DN_ENTRY,1,0,0,1,1,0,9945.10,2497.20,1317.10,3.90,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Darnassus'),
-(@LW_HUNTMASTER_CGUID+4,@EX_ENTRY,530,0,0,1,1,0,-4115.37,-11688.30,-142.789,0.20,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Exodar'),
-(@LW_HUNTMASTER_CGUID+5,@OG_ENTRY,1,0,0,1,1,0,1514.70,-4416.30,22.20,4.70,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Orgrimmar'),
-(@LW_HUNTMASTER_CGUID+6,@TB_ENTRY,1,0,0,1,1,0,-1277.80,111.10,131.90,3.10,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Thunder Bluff'),
-(@LW_HUNTMASTER_CGUID+7,@UC_ENTRY,0,0,0,1,1,0,1585.90,239.40,-52.15,3.10,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Undercity'),
-(@LW_HUNTMASTER_CGUID+8,@SM_ENTRY,530,0,0,1,1,0,9484.20,-7279.10,14.30,3.20,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Silvermoon');
+(@LW_HUNTMASTER_CGUID+1,@SW_ENTRY,0,0,0,1,1,0,-8503.775,566.42554,99.48243,4.7959557,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Stormwind'),
+(@LW_HUNTMASTER_CGUID+2,@IF_ENTRY,0,0,0,1,1,0,-5036.303,-1189.7064,507.4897,5.23103,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Ironforge'),
+(@LW_HUNTMASTER_CGUID+3,@DN_ENTRY,1,0,0,1,1,0,9947.34,2272.71,1341.47,0.017453,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Darnassus'),
+(@LW_HUNTMASTER_CGUID+4,@EX_ENTRY,530,0,0,1,1,0,-4185.3833,-11559.71,-125.5796,3.652105,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Exodar'),
+(@LW_HUNTMASTER_CGUID+5,@OG_ENTRY,1,0,0,1,1,0,1857.5254,-4516.36,24.02204,3.5012627,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Orgrimmar'),
+(@LW_HUNTMASTER_CGUID+6,@TB_ENTRY,1,0,0,1,1,0,-1401.8701,-144.85625,159.25444,1.7206132,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Thunder Bluff'),
+(@LW_HUNTMASTER_CGUID+7,@UC_ENTRY,0,0,0,1,1,0,1476.3986,36.700302,-62.353333,1.599211,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Undercity'),
+(@LW_HUNTMASTER_CGUID+8,@SM_ENTRY,530,0,0,1,1,0,9801.341,-7324.399,14.6854105,2.006077,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Silvermoon'),
+(@LW_HUNTMASTER_CGUID+9,@SH_ENTRY,530,0,0,1,1,0,-2019.2322,5203.5225,-35.69525,5.916366,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Shattrath'),
+(@LW_HUNTMASTER_CGUID+10,@DA_ENTRY,571,0,0,1,1,0,5773.8013,548.9488,651.6386,0.8435841,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Dalaran');
 
-DELETE FROM `lw_hunt_giver` WHERE `id` BETWEEN 1 AND 8;
+DELETE FROM `lw_hunt_giver` WHERE `id` BETWEEN 1 AND 10;
 INSERT INTO `lw_hunt_giver` (`id`,`creature_entry`,`city_name`,`map_id`,`x`,`y`,`z`,`enabled`,`comment`) VALUES
-(1,@SW_ENTRY,'Stormwind City',0,-8831.55,628.72,94.02,1,'Alliance capital Huntmaster'),
-(2,@IF_ENTRY,'Ironforge',0,-4955.20,-1016.10,501.82,1,'Alliance capital Huntmaster'),
-(3,@DN_ENTRY,'Darnassus',1,9945.10,2497.20,1317.10,1,'Alliance capital Huntmaster'),
-(4,@EX_ENTRY,'The Exodar',530,-4115.37,-11688.30,-142.789,1,'Alliance capital Huntmaster - Traders Tier'),
-(5,@OG_ENTRY,'Orgrimmar',1,1514.70,-4416.30,22.20,1,'Horde capital Huntmaster'),
-(6,@TB_ENTRY,'Thunder Bluff',1,-1277.80,111.10,131.90,1,'Horde capital Huntmaster'),
-(7,@UC_ENTRY,'Undercity',0,1585.90,239.40,-52.15,1,'Horde capital Huntmaster'),
-(8,@SM_ENTRY,'Silvermoon City',530,9484.20,-7279.10,14.30,1,'Horde capital Huntmaster');
+(1,@SW_ENTRY,'Stormwind City',0,-8503.775,566.42554,99.48243,1,'Alliance capital Huntmaster'),
+(2,@IF_ENTRY,'Ironforge',0,-5036.303,-1189.7064,507.4897,1,'Alliance capital Huntmaster'),
+(3,@DN_ENTRY,'Darnassus',1,9947.34,2272.71,1341.47,1,'Alliance capital Huntmaster'),
+(4,@EX_ENTRY,'The Exodar',530,-4185.3833,-11559.71,-125.5796,1,'Alliance capital Huntmaster'),
+(5,@OG_ENTRY,'Orgrimmar',1,1857.5254,-4516.36,24.02204,1,'Horde capital Huntmaster'),
+(6,@TB_ENTRY,'Thunder Bluff',1,-1401.8701,-144.85625,159.25444,1,'Horde capital Huntmaster'),
+(7,@UC_ENTRY,'Undercity',0,1476.3986,36.700302,-62.353333,1,'Horde capital Huntmaster'),
+(8,@SM_ENTRY,'Silvermoon City',530,9801.341,-7324.399,14.6854105,1,'Horde capital Huntmaster'),
+(9,@SH_ENTRY,'Shattrath City',530,-2019.2322,5203.5225,-35.69525,1,'Neutral Outland hub Huntmaster'),
+(10,@DA_ENTRY,'Dalaran',571,5773.8013,548.9488,651.6386,1,'Neutral Northrend hub Huntmaster');
 
-DELETE FROM `lw_hunt_guard_locator` WHERE `id` BETWEEN 1 AND 11;
+DELETE FROM `lw_hunt_guard_locator` WHERE `id` BETWEEN 1 AND 13;
 INSERT INTO `lw_hunt_guard_locator` (`id`,`guard_creature_entry`,`hunt_giver_id`,`enabled`,`comment`) VALUES
 (1,68,1,1,'Stormwind City Guard'),
 (2,1976,1,1,'Stormwind City Patroller'),
@@ -96,4 +107,6 @@ INSERT INTO `lw_hunt_guard_locator` (`id`,`guard_creature_entry`,`hunt_giver_id`
 (8,3084,6,1,'Bluffwatcher'),
 (9,5624,7,1,'Undercity Guardian'),
 (10,36213,7,1,'Kor''kron Overseer - Wrath-era Undercity'),
-(11,16222,8,1,'Silvermoon City Guardian');
+(11,16222,8,1,'Silvermoon City Guardian'),
+(12,19687,9,1,'Shattrath City Peacekeeper'),
+(13,30659,10,1,'Violet Hold Guard - Dalaran');

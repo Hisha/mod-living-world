@@ -2,10 +2,13 @@
 -- Living World Hunt zone catalogue
 -- No faction restrictions exist by design. A zone only becomes assignable when
 -- it also has at least one enabled row in lw_hunt_final_location, preventing a
--- hunter from receiving a contract that cannot be completed safely.
+-- hunter from receiving a contract that cannot be completed.
 -- Level bands are intentionally server-tunable content, not C++ constants.
 -- ============================================================================
-DELETE FROM `lw_hunt_zone` WHERE `id` BETWEEN 10 AND 200;
+
+-- Remove any previous catalogue rows for these zone ids. This also replaces the
+-- old Elwynn 10-80 prototype override from 902 with its production level band.
+DELETE FROM `lw_hunt_zone` WHERE `zone_id` IN (1,141,3524,14,215,85,3430,12,3433,40,38,148,3525,130,17,44,406,331,10,11,267,36,400,405,45,33,15,3,8,357,440,47,51,16,4,490,361,46,28,139,618,1377,41,3483,3521,3519,3518,3522,3523,3520,4080,3537,495,65,394,66,3711,2817,67,210);
 INSERT INTO `lw_hunt_zone` (`id`,`zone_id`,`map_id`,`name`,`min_level`,`max_level`,`weight`,`enabled`,`comment`) VALUES
 (10,1,0,'Dun Morogh',10,15,100,1,'Eastern Kingdoms'),
 (11,141,1,'Teldrassil',10,15,100,1,'Kalimdor'),
@@ -13,7 +16,9 @@ INSERT INTO `lw_hunt_zone` (`id`,`zone_id`,`map_id`,`name`,`min_level`,`max_leve
 (13,14,1,'Durotar',10,15,100,1,'Kalimdor'),
 (14,215,1,'Mulgore',10,15,100,1,'Kalimdor'),
 (15,85,0,'Tirisfal Glades',10,15,100,1,'Eastern Kingdoms'),
-(16,3430,530,'Eversong Woods',10,15,100,1,'Outland map - starting zone'),
+(16,3430,530,'Eversong Woods',10,15,100,1,'Eastern Kingdoms - BC map'),
+(17,12,0,'Elwynn Forest',10,15,100,1,'Eastern Kingdoms'),
+(18,3433,530,'Ghostlands',10,20,100,1,'Eastern Kingdoms - BC map'),
 (20,40,0,'Westfall',10,20,100,1,'Eastern Kingdoms'),
 (21,38,0,'Loch Modan',10,20,100,1,'Eastern Kingdoms'),
 (22,148,1,'Darkshore',10,20,100,1,'Kalimdor'),
@@ -26,6 +31,7 @@ INSERT INTO `lw_hunt_zone` (`id`,`zone_id`,`map_id`,`name`,`min_level`,`max_leve
 (33,10,0,'Duskwood',20,30,100,1,'Eastern Kingdoms'),
 (34,11,0,'Wetlands',20,30,100,1,'Eastern Kingdoms'),
 (35,267,0,'Hillsbrad Foothills',20,30,100,1,'Eastern Kingdoms'),
+(36,36,0,'Alterac Mountains',30,40,100,1,'Eastern Kingdoms'),
 (40,400,1,'Thousand Needles',25,35,100,1,'Kalimdor'),
 (41,405,1,'Desolace',30,40,100,1,'Kalimdor'),
 (42,45,0,'Arathi Highlands',30,40,100,1,'Eastern Kingdoms'),
@@ -46,6 +52,7 @@ INSERT INTO `lw_hunt_zone` (`id`,`zone_id`,`map_id`,`name`,`min_level`,`max_leve
 (62,139,0,'Eastern Plaguelands',53,60,100,1,'Eastern Kingdoms'),
 (63,618,1,'Winterspring',55,60,100,1,'Kalimdor'),
 (64,1377,1,'Silithus',55,60,100,1,'Kalimdor'),
+(65,41,0,'Deadwind Pass',55,60,100,1,'Eastern Kingdoms'),
 (70,3483,530,'Hellfire Peninsula',58,63,100,1,'Outland'),
 (71,3521,530,'Zangarmarsh',60,64,100,1,'Outland'),
 (72,3519,530,'Terokkar Forest',62,65,100,1,'Outland'),
@@ -53,6 +60,7 @@ INSERT INTO `lw_hunt_zone` (`id`,`zone_id`,`map_id`,`name`,`min_level`,`max_leve
 (74,3522,530,'Blade''s Edge Mountains',65,68,100,1,'Outland'),
 (75,3523,530,'Netherstorm',67,70,100,1,'Outland'),
 (76,3520,530,'Shadowmoon Valley',67,70,100,1,'Outland'),
+(77,4080,530,'Isle of Quel''Danas',70,70,100,1,'Eastern Kingdoms - BC map'),
 (80,3537,571,'Borean Tundra',68,72,100,1,'Northrend'),
 (81,495,571,'Howling Fjord',68,72,100,1,'Northrend'),
 (82,65,571,'Dragonblight',71,74,100,1,'Northrend'),

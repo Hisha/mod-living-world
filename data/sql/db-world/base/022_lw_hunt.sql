@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS `lw_hunt_final_location` (
   `y` FLOAT NOT NULL,
   `z` FLOAT NOT NULL,
   `orientation` FLOAT NOT NULL DEFAULT 0,
-  `location_name` VARCHAR(120) NOT NULL,
+  `location_name` VARCHAR(120) NOT NULL DEFAULT '',
   `weight` INT UNSIGNED NOT NULL DEFAULT 100,
   `enabled` TINYINT UNSIGNED NOT NULL DEFAULT 1,
   `comment` VARCHAR(255) NULL,

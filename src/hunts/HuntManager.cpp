@@ -5,6 +5,7 @@
 #include "GameObject.h"
 #include "LwCreatureTemplateManager.h"
 #include "DatabaseEnv.h"
+#include "DBCStores.h"
 #include "Log.h"
 #include "Map.h"
 #include "ObjectAccessor.h"
@@ -353,6 +354,34 @@ HuntFinalLocationDefinition const* HuntManager::GetFinalLocation(uint32 finalLoc
     return nullptr;
 }
 
+std::string HuntManager::ResolveFinalLocationName(Player* player, HuntFinalLocationDefinition const& location) const
+{
+    // Explicit authored names remain supported for special locations. Most Hunt
+    // sites leave this blank and use the client's AreaTable name dynamically.
+    if (!location.LocationName.empty())
+        return location.LocationName;
+
+    if (player && player->GetSession() && player->GetMapId() == location.MapId)
+    {
+        if (Map* map = player->GetMap())
+        {
+            uint32 const areaId = map->GetAreaId(player->GetPhaseMask(), location.X, location.Y, location.Z);
+            if (AreaTableEntry const* area = sAreaTableStore.LookupEntry(areaId))
+            {
+                LocaleConstant const locale = player->GetSession()->GetSessionDbcLocale();
+                std::string const areaName = area->area_name[locale];
+                if (!areaName.empty())
+                    return areaName;
+            }
+        }
+    }
+
+    if (HuntZoneDefinition const* zone = GetZone(location.ZoneId))
+        return zone->Name;
+
+    return "the marked hunting grounds";
+}
+
 void HuntManager::RemoveFinalActivator(Player* player, HuntRuntime& r)
 {
     if (r.FinalActivatorGuid.IsEmpty())
@@ -544,7 +573,8 @@ void HuntManager::LocateFinal(Player* player, HuntRuntime& r)
 {
     HuntFinalLocationDefinition const* l=SelectFinalLocation(r); if(!l) return;
     r.TrackingProgress=100; r.FinalLocationId=l->Id; r.State=HuntState::FinalLocated; SaveRuntime(r);
-    ChatHandler(player->GetSession()).PSendSysMessage("|cff00ff00[LW Hunt]|r Your tracking is complete. {} has been located at {}.", GetDefinition(r.HuntId)->Name,l->LocationName);
+    std::string const locationName = ResolveFinalLocationName(player, *l);
+    ChatHandler(player->GetSession()).PSendSysMessage("|cff00ff00[LW Hunt]|r Your tracking is complete. {} has been located near {}.", GetDefinition(r.HuntId)->Name, locationName);
 
     // 3.3.5a's normal guard-direction marker is SMSG_GOSSIP_POI.  Send the
     // selected authored hunt location directly so Hunts do not need a client

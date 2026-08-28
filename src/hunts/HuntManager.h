@@ -140,6 +140,7 @@ private:
     bool SpawnPrey(Player* player, HuntRuntime& runtime, bool finalEncounter, std::string& message);
     uint32 ResolvePreyEntry(HuntDefinition const& hunt) const;
     HuntFinalLocationDefinition const* GetFinalLocation(uint32 finalLocationId) const;
+    std::string ResolveFinalLocationName(Player* player, HuntFinalLocationDefinition const& location) const;
     bool EnsureFinalActivator(Player* player, HuntRuntime& runtime);
     void RemoveFinalActivator(Player* player, HuntRuntime& runtime);
     void LocateFinal(Player* player, HuntRuntime& runtime);

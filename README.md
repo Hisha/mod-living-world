@@ -2,7 +2,7 @@
 
 Living World (LW) is an AzerothCore module for SQL-authored dynamic world activity: staged invasions, reusable route-driven movement, traveling civilian events, and calendar-driven world events. It requires no client modification and no AzerothCore core patch.
 
-**Current development version:** `0.3.0-dev`
+**Current development version:** `0.5.1-dev`
 
 
 ## Repository layout
@@ -77,7 +77,7 @@ LW is a framework rather than a collection of hard-coded events. Event-specific 
 
 Use `.lw route export network` with `LivingWorld.Debug = 1` to generate `lw_exports/801_routes.sql`, then copy it into `data/sql/db-world/prebuilt/801_routes.sql` when publishing the canonical route network. Published route-node IDs are data contracts and should not be renumbered casually.
 
-## Hunt / Prey prototype (0.4.0-dev)
+## Hunt / Prey prototype (0.4.2-dev)
 
 The first Hunt subsystem prototype is intentionally limited to Elwynn Forest while the encounter loop is validated.
 
@@ -87,8 +87,10 @@ The first Hunt subsystem prototype is intentionally limited to Elwynn Forest whi
 - Active hunt state is per-character and persisted in `lw_hunt_runtime`.
 - Normal creature kills in the assigned zone build randomized tracking progress.
 - The prototype performs two prey ambushes. At the configured escape-health threshold (50% in the test content), the prey becomes non-attackable and despawns.
-- At 100%, an authored final location is selected and announced. A native 3.3.5 `SMSG_GOSSIP_POI` map marker is sent for the selected final location. The clickable final activation object is the next implementation step.
-- `.lw hunt final` currently spawns the final prey after the player travels to the announced location.
+- At 100%, an authored final location is selected and announced. A native 3.3.5 `SMSG_GOSSIP_POI` map marker is sent for the selected final location.
+- When the hunter approaches the marked site, Living World spawns a clickable prey-trail marker using an existing 3.3.5 client GameObject visual. Clicking it begins the final encounter; `.lw hunt final` remains available only as a GM/debug fallback.
+- Prototype prey can reference an LW logical creature template, allowing a custom name/rank/combat shell while reusing an existing client model. Ashfang now uses this path.
+- Hunt prey health is floored relative to the hunter's own maximum health so high-level characters cannot trivially one-shot a low-level visual base.
 - Killing the final prey changes the contract to ready-to-turn-in; the player must return to the exact Huntmaster spawn that issued it.
 
 ### First test setup
@@ -110,3 +112,10 @@ Useful GM/debug commands:
 .lw hunt final
 .lw hunt abandon
 ```
+
+
+## Hunt system (0.5.1-dev)
+
+The Hunt world rollout now includes 10 permanent Huntmasters (the eight racial capitals plus neutral Shattrath and Dalaran) and three curated final encounter sites for every enabled Eastern Kingdoms hunt zone. Final-site sub-area names are resolved from AreaTable.dbc at runtime when no explicit location name is authored.
+
+Hunts are an optional Living World subsystem with permanent Huntmasters in the eight faction capitals. Capital guards can point players to their local Huntmaster without replacing the stock guard direction menus. Hunt target selection and hunt-zone selection are independent and level-aware; hunt zones have no faction restriction. Final encounter sites are authored separately per zone so crystals can be kept away from hostile settlements. Only zones with at least one enabled final site are eligible for assignment. Huntmasters also expose a persistent per-character hunting record through gossip.
