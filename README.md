@@ -1,3 +1,13 @@
+## 0.5.3-dev Hunt final-location authoring
+
+Adds in-game GM/debug authoring commands for Hunt final crystal sites:
+
+- `.lw hunt set final point` stores the GM's current map, zone, XYZ and orientation directly in `lw_hunt_final_location`.
+- `.lw hunt set final list` lists enabled final sites in the GM's current zone.
+- `.lw hunt set final delete <id>` removes a site and warns when the last enabled site for a zone is removed.
+- Authoring commands require both Game Master mode and `LivingWorld.Debug = 1`.
+- Added/deleted sites are reloaded into the live Hunt selection pool immediately; no world restart is required.
+
 ## 0.5.2-dev Hunt tuning and scope
 
 - Fixes first-completion Hunt statistics persistence by writing `lw_hunt_stats` synchronously before confirming turn-in.

@@ -116,6 +116,7 @@ public:
     bool IsEnabled() const { return _enabled; }
     uint8 GetMinimumLevel() const { return _minimumLevel; }
     float GetXpMultiplier() const { return _xpMultiplier; }
+    bool IsDebugEnabled() const { return _debug; }
 
     bool HasActiveHunt(Player const* player) const;
     HuntRuntime const* GetRuntime(Player const* player) const;
@@ -132,6 +133,11 @@ public:
     bool ForceFinal(Player* player, std::string& message);
     std::string BuildStatus(Player const* player) const;
     std::string BuildStats(Player const* player) const;
+
+    // GM/debug world-authoring helpers for final hunt crystal locations.
+    bool AddFinalLocationAtPlayer(Player* player, std::string& message);
+    std::string BuildFinalLocationList(Player const* player) const;
+    bool DeleteFinalLocation(uint32 locationId, std::string& message);
 
     bool IsHuntGiver(uint32 creatureEntry) const;
     bool IsGuardLocator(uint32 creatureEntry) const;
