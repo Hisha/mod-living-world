@@ -1,4 +1,11 @@
-## 0.5.7-dev Shared final-prey kill credit
+## 0.5.8-dev Expanded Hunt prey roster and abilities
+
+- Expanded the legendary Hunt prey roster from 8 to 16 prey.
+- Added data-driven combat personalities to every prey using existing 3.3.5a creature spells.
+- Added bleeds, frenzy, knockdowns, roars, thrash, silence, fear, poison, and enrage behaviors with conservative cooldowns.
+- No client patch and no C++ Hunt behavior changes are required for the new prey content.
+
+## 0.5.8-dev Shared final-prey kill credit
 
 - Final prey completion is now resolved from the Hunt runtime that spawned the creature, not only from the player who landed the killing blow.
 - The owning hunter receives credit when they get the kill, when a member of their current group gets the kill, or when normal creature tap rules show that the hunter/group tagged the prey.
@@ -35,7 +42,7 @@ Living World (LW) is an AzerothCore module for SQL-authored dynamic world activi
 - Hunt prey kills remain exempt from the ordinary tracking eligibility check.
 - Adds the non-grey/XP-eligibility tracking rule; prey content is maintained in `910_beast_prey.sql`.
 
-**Current development version:** `0.5.7-dev`
+**Current development version:** `0.5.8-dev`
 
 
 ## Repository layout
@@ -147,7 +154,7 @@ Useful GM/debug commands:
 ```
 
 
-## Hunt system (0.5.7-dev)
+## Hunt system (0.5.8-dev)
 
 The Hunt world rollout now includes 10 permanent Huntmasters (the eight racial capitals plus neutral Shattrath and Dalaran) and three curated final encounter sites for every enabled Eastern Kingdoms hunt zone. Final-site sub-area names are resolved from AreaTable.dbc at runtime when no explicit location name is authored.
 
