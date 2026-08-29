@@ -1,3 +1,12 @@
+## 0.5.7-dev Shared final-prey kill credit
+
+- Final prey completion is now resolved from the Hunt runtime that spawned the creature, not only from the player who landed the killing blow.
+- The owning hunter receives credit when they get the kill, when a member of their current group gets the kill, or when normal creature tap rules show that the hunter/group tagged the prey.
+- Nearby group members (within 200 yards) who are in the same final-stage prey/zone hunt also receive shared completion credit.
+- Shared completion clears duplicate final prey/activators, advances credited hunters to `ReadyToTurnIn`, persists immediately, and stops the final-location POI refresh.
+- Unrelated outsiders may still help, but do not receive Hunt credit; an uncredited outsider kill leaves the owner's hunt recoverable so the crystal can return.
+- Final prey kills no longer fall through into ordinary tracking progress.
+
 ## 0.5.6-dev Hunt recovery persistence fix
 
 - Corrects the Hunt prey loader to use the canonical `lw_hunt_prey` table.
@@ -26,7 +35,7 @@ Living World (LW) is an AzerothCore module for SQL-authored dynamic world activi
 - Hunt prey kills remain exempt from the ordinary tracking eligibility check.
 - Adds the non-grey/XP-eligibility tracking rule; prey content is maintained in `910_beast_prey.sql`.
 
-**Current development version:** `0.5.6-dev`
+**Current development version:** `0.5.7-dev`
 
 
 ## Repository layout
@@ -138,7 +147,7 @@ Useful GM/debug commands:
 ```
 
 
-## Hunt system (0.5.6-dev)
+## Hunt system (0.5.7-dev)
 
 The Hunt world rollout now includes 10 permanent Huntmasters (the eight racial capitals plus neutral Shattrath and Dalaran) and three curated final encounter sites for every enabled Eastern Kingdoms hunt zone. Final-site sub-area names are resolved from AreaTable.dbc at runtime when no explicit location name is authored.
 

@@ -362,32 +362,132 @@ uint8 HuntManager::GetNextAmbushThreshold(HuntRuntime const& r, HuntDefinition c
 
 void HuntManager::OnCreatureKill(Player* player, Creature* killed)
 {
-    if(!_enabled||!player||!killed) return;
-    auto it=_runtimes.find(player->GetGUID().GetCounter()); if(it==_runtimes.end()) return;
-    HuntRuntime& r=it->second;
+    if (!_enabled || !player || !killed)
+        return;
 
-    if(r.ActivePreyGuid==killed->GetGUID())
+    // Final prey belongs to the hunt runtime that spawned it, not to whichever
+    // player happened to land the killing blow. Resolve encounter ownership by
+    // GUID first so a grouped hunter can receive credit when a party member
+    // finishes the prey. The creature's normal tap rules are also honored, so a
+    // hunter who tagged the prey can still receive credit when another player
+    // helps finish it.
+    HuntRuntime* owningRuntime = nullptr;
+    for (auto& [guid, runtime] : _runtimes)
     {
-        _abilityTimers.erase(r.CharacterGuid);
-        r.ActivePreyGuid.Clear();
-        if(r.ActivePreyFinal)
+        if (runtime.ActivePreyGuid == killed->GetGUID())
         {
-            r.ActivePreyFinal=false; r.State=HuntState::ReadyToTurnIn; SaveRuntime(r);
-            ChatHandler(player->GetSession()).SendSysMessage("|cff00ff00[LW Hunt]|r Your quarry is dead. Return to the Huntmaster who gave you the contract.");
+            owningRuntime = &runtime;
+            break;
         }
+    }
+
+    if (owningRuntime)
+    {
+        HuntRuntime& ownerRuntime = *owningRuntime;
+        bool finalEncounter = ownerRuntime.ActivePreyFinal;
+
+        // Ambush prey remains owner-specific. Its death is not a successful
+        // completion; ambushes are expected to escape at the configured HP
+        // threshold. If one somehow dies, just clear the runtime creature state.
+        if (!finalEncounter)
+        {
+            _abilityTimers.erase(ownerRuntime.CharacterGuid);
+            ownerRuntime.ActivePreyGuid.Clear();
+            SaveRuntime(ownerRuntime);
+            return;
+        }
+
+        Player* owner = ObjectAccessor::FindConnectedPlayer(
+            ObjectGuid::Create<HighGuid::Player>(ownerRuntime.CharacterGuid));
+
+        bool ownerEligible = false;
+        if (owner)
+        {
+            bool sameGroup = owner->GetGroup() && player->GetGroup() && owner->GetGroup() == player->GetGroup();
+            ownerEligible = (owner == player) || sameGroup || killed->isTappedBy(owner);
+        }
+
+        if (ownerEligible)
+        {
+            uint32 preyId = ownerRuntime.PreyId;
+            uint32 zoneId = ownerRuntime.ZoneId;
+            auto* creditedGroup = owner->GetGroup();
+
+            // Credit the encounter owner and any nearby party member who is in
+            // the same final-stage hunt for the same prey/zone. This makes Tier-1
+            // hunt encounters genuinely cooperative while outsiders may still
+            // help without receiving hunt completion.
+            for (auto& [guid, runtime] : _runtimes)
+            {
+                if (runtime.PreyId != preyId || runtime.ZoneId != zoneId || runtime.State != HuntState::FinalLocated)
+                    continue;
+
+                Player* hunter = ObjectAccessor::FindConnectedPlayer(ObjectGuid::Create<HighGuid::Player>(guid));
+                if (!hunter || hunter->GetMapId() != killed->GetMapId())
+                    continue;
+
+                bool isOwner = guid == ownerRuntime.CharacterGuid;
+                bool groupedWithOwner = creditedGroup && hunter->GetGroup() == creditedGroup;
+                bool tapped = killed->isTappedBy(hunter);
+                if (!isOwner && !groupedWithOwner && !tapped)
+                    continue;
+
+                // Do not grant remote group credit from across the map.
+                if (!isOwner && hunter->GetDistance(killed) > 200.0f)
+                    continue;
+
+                _abilityTimers.erase(runtime.CharacterGuid);
+
+                // A second hunter on the same contract may already have spawned
+                // their own copy. Remove it now that the shared kill satisfied
+                // their contract as well.
+                if (!runtime.ActivePreyGuid.IsEmpty() && runtime.ActivePreyGuid != killed->GetGUID())
+                {
+                    if (Creature* otherPrey = ObjectAccessor::GetCreature(*hunter, runtime.ActivePreyGuid))
+                        otherPrey->DespawnOrUnsummon();
+                }
+
+                runtime.ActivePreyGuid.Clear();
+                runtime.ActivePreyFinal = false;
+                RemoveFinalActivator(hunter, runtime);
+                runtime.State = HuntState::ReadyToTurnIn;
+                SaveRuntime(runtime);
+
+                ChatHandler(hunter->GetSession()).SendSysMessage(
+                    "|cff00ff00[LW Hunt]|r Your quarry is dead. Return to the Huntmaster who gave you the contract.");
+            }
+        }
+        else
+        {
+            // The prey was killed by an unrelated outsider and the hunter did
+            // not have the tap. Leave the hunt in FinalLocated; once the corpse
+            // disappears the activator may return and the hunter can try again.
+            _abilityTimers.erase(ownerRuntime.CharacterGuid);
+            ownerRuntime.ActivePreyGuid.Clear();
+            ownerRuntime.ActivePreyFinal = false;
+            SaveRuntime(ownerRuntime);
+        }
+
+        // Hunt prey should never also count as ordinary tracking progress.
         return;
     }
 
-    if(r.State!=HuntState::Tracking || player->GetZoneId()!=r.ZoneId) return;
+    auto it = _runtimes.find(player->GetGUID().GetCounter());
+    if (it == _runtimes.end())
+        return;
+
+    HuntRuntime& r = it->second;
+    if (r.State != HuntState::Tracking || player->GetZoneId() != r.ZoneId)
+        return;
 
     // Ordinary tracking progress only comes from creatures that are non-grey
     // to this hunter. This mirrors the normal XP color rules without depending
     // on whether the player has XP gain disabled or on the server's XP rate.
-    // Hunt prey is handled above and is intentionally exempt from this filter.
     if (Acore::XP::GetColorCode(player->GetLevel(), killed->GetLevel()) == XP_GRAY)
         return;
 
-    std::string ignored; AddProgress(player, static_cast<uint8>(urand(3,7)), ignored);
+    std::string ignored;
+    AddProgress(player, static_cast<uint8>(urand(3, 7)), ignored);
 }
 
 bool HuntManager::AddProgress(Player* player, uint8 amount, std::string& message)
