@@ -178,8 +178,17 @@ void HuntManager::LoadRuntimes()
 
 void HuntManager::SaveRuntime(HuntRuntime const& r)
 {
-    CharacterDatabase.Execute("REPLACE INTO `lw_hunt_runtime` (`guid`,`prey_id`,`giver_entry`,`giver_spawn_id`,`zone_id`,`final_location_id`,`tracking_progress`,`ambushes_completed`,`state`) VALUES ({},{},{},{},{},{},{},{},{})",
-        r.CharacterGuid,r.PreyId,r.GiverEntry,r.GiverSpawnId,r.ZoneId,r.FinalLocationId,r.TrackingProgress,r.AmbushesCompleted,static_cast<uint32>(r.State));
+    // Hunt state transitions are small but gameplay-critical. Persist them
+    // synchronously so a restart/logout cannot leave the database one state
+    // behind the in-memory runtime (for example tracking=100/state=1 while
+    // memory has already advanced to FinalLocated).
+    std::ostringstream sql;
+    sql << "REPLACE INTO `lw_hunt_runtime` "
+        << "(`guid`,`prey_id`,`giver_entry`,`giver_spawn_id`,`zone_id`,`final_location_id`,`tracking_progress`,`ambushes_completed`,`state`) VALUES ("
+        << r.CharacterGuid << ',' << r.PreyId << ',' << r.GiverEntry << ',' << r.GiverSpawnId << ','
+        << r.ZoneId << ',' << r.FinalLocationId << ',' << uint32(r.TrackingProgress) << ','
+        << uint32(r.AmbushesCompleted) << ',' << static_cast<uint32>(r.State) << ')';
+    CharacterDatabase.DirectExecute(sql.str().c_str());
 }
 
 void HuntManager::DeleteRuntime(uint32 guid)
@@ -813,21 +822,39 @@ void HuntManager::Update(uint32 diff)
     {
         Player* p=ObjectAccessor::FindConnectedPlayer(ObjectGuid::Create<HighGuid::Player>(guid)); if(!p) continue;
 
-        if (r.State == HuntState::FinalLocated)
+        // TrackingProgress is the recovery source of truth. A hunt that has
+        // reached 100% must either be ReadyToTurnIn or have a valid final site.
+        // This repairs both observed broken forms:
+        //   100%, state=Tracking,      final_location_id=0
+        //   100%, state=FinalLocated,  final_location_id=0
+        if (r.TrackingProgress >= 100 && r.State != HuntState::ReadyToTurnIn)
         {
-            // Self-heal the invalid state seen in live testing: state=FinalLocated
-            // with final_location_id=0 (or an ID removed from the authored data).
-            if (!r.FinalLocationId || !GetFinalLocation(r.FinalLocationId))
+            HuntFinalLocationDefinition const* finalLocation =
+                r.FinalLocationId ? GetFinalLocation(r.FinalLocationId) : nullptr;
+
+            if (!finalLocation)
             {
                 if (refreshFinalPoi)
                 {
-                    LOG_WARN("server.loading", "[LW Hunt] Repairing missing final location for character {} prey {} zone {}.",
-                        r.CharacterGuid, r.PreyId, r.ZoneId);
+                    LOG_WARN("server.loading",
+                        "[LW Hunt] Repairing incomplete final state for character {} prey {} zone {} (state={}, final_location_id={}).",
+                        r.CharacterGuid, r.PreyId, r.ZoneId, static_cast<uint32>(r.State), r.FinalLocationId);
                     LocateFinal(p, r);
                 }
             }
             else
             {
+                // If the authored final site was persisted but the state was not,
+                // promote the runtime without choosing a different location.
+                if (r.State != HuntState::FinalLocated)
+                {
+                    LOG_WARN("server.loading",
+                        "[LW Hunt] Promoting recovered 100% hunt for character {} prey {} from state {} to FinalLocated using final location {}.",
+                        r.CharacterGuid, r.PreyId, static_cast<uint32>(r.State), r.FinalLocationId);
+                    r.State = HuntState::FinalLocated;
+                    SaveRuntime(r);
+                }
+
                 if (refreshFinalPoi)
                     SendFinalLocationPoi(p, r);
 

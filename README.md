@@ -1,4 +1,4 @@
-## 0.5.5-dev Hunt final-location recovery and persistent prey marker
+## 0.5.6-dev Hunt recovery persistence fix
 
 - Corrects the Hunt prey loader to use the canonical `lw_hunt_prey` table.
 - Corrects active-hunt persistence to use the canonical `prey_id` runtime column.
@@ -26,7 +26,7 @@ Living World (LW) is an AzerothCore module for SQL-authored dynamic world activi
 - Hunt prey kills remain exempt from the ordinary tracking eligibility check.
 - Adds the non-grey/XP-eligibility tracking rule; prey content is maintained in `910_beast_prey.sql`.
 
-**Current development version:** `0.5.5-dev`
+**Current development version:** `0.5.6-dev`
 
 
 ## Repository layout
@@ -138,11 +138,18 @@ Useful GM/debug commands:
 ```
 
 
-## Hunt system (0.5.5-dev)
+## Hunt system (0.5.6-dev)
 
 The Hunt world rollout now includes 10 permanent Huntmasters (the eight racial capitals plus neutral Shattrath and Dalaran) and three curated final encounter sites for every enabled Eastern Kingdoms hunt zone. Final-site sub-area names are resolved from AreaTable.dbc at runtime when no explicit location name is authored.
 
 Hunts are an optional Living World subsystem with permanent Huntmasters in the eight faction capitals. Capital guards can point players to their local Huntmaster without replacing the stock guard direction menus. Hunt target selection and hunt-zone selection are independent and level-aware; hunt zones have no faction restriction. Final encounter sites are authored separately per zone so crystals can be kept away from hostile settlements. Only zones with at least one enabled final site are eligible for assignment. Huntmasters also expose a persistent per-character hunting record through gossip.
+
+
+### 0.5.6 recovery persistence fix
+
+- `tracking_progress >= 100` is now the recovery source of truth, so both `state=1/final_location_id=0` and `state=2/final_location_id=0` self-heal.
+- Hunt runtime saves now use synchronous character-database writes for state transitions, preventing the database from lagging behind the in-memory hunt state during logout/restart.
+- If a valid final location was saved but the state was not, the runtime promotes to `FinalLocated` without rerolling the authored site.
 
 ### 0.5.5 final-location recovery
 
