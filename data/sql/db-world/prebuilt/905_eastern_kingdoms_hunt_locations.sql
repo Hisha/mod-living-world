@@ -23,7 +23,7 @@ INSERT INTO `lw_hunt_final_location` (`id`,`zone_id`,`map_id`,`x`,`y`,`z`,`orien
 (1008,40,0,-11090.884,713.21173,38.294098,0,'',100,1,'Westfall authored final site 3'),
 (1009,12,0,-9810.802,-476.65073,33.40272,0,'',100,1,'Elwynn Forest authored final site 1'),
 (1010,12,0,-8968.517,-731.9333,74.776085,0,'',100,1,'Elwynn Forest authored final site 2'),
-(1011,12,0,-9437.81,466.159,53.2881,0,'',100,1,'Elwynn Forest authored final site 3'),
+(1011,12,0,-9451.14,457.517,52.288868,0,'',100,1,'Elwynn Forest authored final site 3'),
 (1012,44,0,-9323.248,-3159.5166,115.8315,0,'',100,1,'Redridge Mountains authored final site 1'),
 (1013,44,0,-9707.816,-2356.0315,67.70925,0,'',100,1,'Redridge Mountains authored final site 2'),
 (1014,44,0,-9051.015,-2638.9182,128.52144,0,'',100,1,'Redridge Mountains authored final site 3'),
