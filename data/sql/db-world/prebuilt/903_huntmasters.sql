@@ -71,7 +71,7 @@ DELETE FROM `creature` WHERE `id` IN (@SW_ENTRY,@IF_ENTRY,@DN_ENTRY,@EX_ENTRY,@O
 SET @LW_HUNTMASTER_CGUID := (SELECT COALESCE(MAX(`guid`),0) FROM `creature`);
 INSERT INTO `creature`
 (`guid`,`id`,`map`,`zoneId`,`areaId`,`spawnMask`,`phaseMask`,`equipment_id`,`position_x`,`position_y`,`position_z`,`orientation`,`spawntimesecs`,`wander_distance`,`currentwaypoint`,`curhealth`,`curmana`,`MovementType`,`npcflag`,`unit_flags`,`dynamicflags`,`ScriptName`,`VerifiedBuild`,`CreateObject`,`Comment`) VALUES
-(@LW_HUNTMASTER_CGUID+1,@SW_ENTRY,0,0,0,1,1,0,-8503.775,566.42554,99.48243,4.7959557,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Stormwind'),
+(@LW_HUNTMASTER_CGUID+1,@SW_ENTRY,0,0,0,1,1,0,-8771.718,637.399,97.22381,3.0327725,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Stormwind'),
 (@LW_HUNTMASTER_CGUID+2,@IF_ENTRY,0,0,0,1,1,0,-5036.303,-1189.7064,507.4897,5.23103,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Ironforge'),
 (@LW_HUNTMASTER_CGUID+3,@DN_ENTRY,1,0,0,1,1,0,9947.34,2272.71,1341.47,0.017453,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Darnassus'),
 (@LW_HUNTMASTER_CGUID+4,@EX_ENTRY,530,0,0,1,1,0,-4185.3833,-11559.71,-125.5796,3.652105,300,0,0,1,0,0,0,0,0,'',0,0,'LW Huntmaster - Exodar'),
@@ -84,7 +84,7 @@ INSERT INTO `creature`
 
 DELETE FROM `lw_hunt_giver` WHERE `id` BETWEEN 1 AND 10;
 INSERT INTO `lw_hunt_giver` (`id`,`creature_entry`,`city_name`,`map_id`,`continent_id`,`x`,`y`,`z`,`enabled`,`comment`) VALUES
-(1,@SW_ENTRY,'Stormwind City',0,1,-8503.775,566.42554,99.48243,1,'Alliance capital Huntmaster'),
+(1,@SW_ENTRY,'Stormwind City',0,1,-8771.718,637.399,97.22381,1,'Alliance capital Huntmaster'),
 (2,@IF_ENTRY,'Ironforge',0,1,-5036.303,-1189.7064,507.4897,1,'Alliance capital Huntmaster'),
 (3,@DN_ENTRY,'Darnassus',1,2,9947.34,2272.71,1341.47,1,'Alliance capital Huntmaster'),
 (4,@EX_ENTRY,'The Exodar',530,2,-4185.3833,-11559.71,-125.5796,1,'Alliance capital Huntmaster'),
