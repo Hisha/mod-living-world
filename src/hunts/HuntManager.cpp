@@ -472,22 +472,46 @@ void HuntManager::OnCreatureKill(Player* player, Creature* killed)
         return;
     }
 
-    auto it = _runtimes.find(player->GetGUID().GetCounter());
-    if (it == _runtimes.end())
-        return;
+    // Ordinary tracking credit is shared with nearby party members. AzerothCore's
+    // creature-kill hook identifies the player credited with the kill; without
+    // propagating that event, a hunter grouped with other players/playerbots can
+    // miss most tracking progress simply because somebody else landed the kill.
+    //
+    // Each eligible hunter is evaluated independently: they must be actively
+    // tracking this zone, be on the same map, be within 100 yards of the kill,
+    // and the creature must be non-grey to that hunter. Group size never divides
+    // the normal 3-7% tracking gain.
+    auto* killingGroup = player->GetGroup();
 
-    HuntRuntime& r = it->second;
-    if (r.State != HuntState::Tracking || player->GetZoneId() != r.ZoneId)
-        return;
+    for (auto& [guid, runtime] : _runtimes)
+    {
+        if (runtime.State != HuntState::Tracking)
+            continue;
 
-    // Ordinary tracking progress only comes from creatures that are non-grey
-    // to this hunter. This mirrors the normal XP color rules without depending
-    // on whether the player has XP gain disabled or on the server's XP rate.
-    if (Acore::XP::GetColorCode(player->GetLevel(), killed->GetLevel()) == XP_GRAY)
-        return;
+        Player* hunter = ObjectAccessor::FindConnectedPlayer(ObjectGuid::Create<HighGuid::Player>(guid));
+        if (!hunter)
+            continue;
 
-    std::string ignored;
-    AddProgress(player, static_cast<uint8>(urand(3, 7)), ignored);
+        bool isKiller = hunter == player;
+        bool groupedWithKiller = killingGroup && hunter->GetGroup() == killingGroup;
+        if (!isKiller && !groupedWithKiller)
+            continue;
+
+        if (hunter->GetMapId() != killed->GetMapId() || hunter->GetZoneId() != runtime.ZoneId)
+            continue;
+
+        if (hunter->GetDistance(killed) > 100.0f)
+            continue;
+
+        // Ordinary tracking progress only comes from creatures that are non-grey
+        // to this hunter. Evaluate the XP color separately for every group member,
+        // because the same creature can be green to one hunter and grey to another.
+        if (Acore::XP::GetColorCode(hunter->GetLevel(), killed->GetLevel()) == XP_GRAY)
+            continue;
+
+        std::string ignored;
+        AddProgress(hunter, static_cast<uint8>(urand(3, 7)), ignored);
+    }
 }
 
 bool HuntManager::AddProgress(Player* player, uint8 amount, std::string& message)

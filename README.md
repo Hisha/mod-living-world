@@ -1,3 +1,12 @@
+## 0.5.9-dev Group Hunt tracking credit
+
+- Ordinary Hunt tracking kills now grant progress to nearby members of the killer's group who are actively tracking the same zone.
+- Each eligible hunter receives an independent normal random +3% to +7% progress roll; group size does not divide the gain.
+- Group tracking credit is limited to hunters on the same map and within 100 yards of the killed creature.
+- The grey-mob XP-color check is evaluated independently for each hunter, so a mob may count for a lower-level member while correctly giving no progress to a higher-level member.
+- Hunt prey remain excluded from ordinary tracking progress and continue through their dedicated ambush/final-prey paths.
+- No SQL/schema changes are required.
+
 ## 0.5.8-dev Expanded Hunt prey roster and abilities
 
 - Expanded the legendary Hunt prey roster from 8 to 16 prey.
@@ -42,7 +51,7 @@ Living World (LW) is an AzerothCore module for SQL-authored dynamic world activi
 - Hunt prey kills remain exempt from the ordinary tracking eligibility check.
 - Adds the non-grey/XP-eligibility tracking rule; prey content is maintained in `910_beast_prey.sql`.
 
-**Current development version:** `0.5.8-dev`
+**Current development version:** `0.5.9-dev`
 
 
 ## Repository layout
@@ -154,7 +163,7 @@ Useful GM/debug commands:
 ```
 
 
-## Hunt system (0.5.8-dev)
+## Hunt system (0.5.9-dev)
 
 The Hunt world rollout now includes 10 permanent Huntmasters (the eight racial capitals plus neutral Shattrath and Dalaran) and three curated final encounter sites for every enabled Eastern Kingdoms hunt zone. Final-site sub-area names are resolved from AreaTable.dbc at runtime when no explicit location name is authored.
 
