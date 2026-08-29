@@ -53,6 +53,7 @@ void HuntManager::Reset()
     _giverLocalZones.clear();
     _runtimes.clear();
     _updateTimerMs = 0;
+    _finalPoiRefreshTimerMs = 0;
 }
 
 void HuntManager::LoadDefinitions()
@@ -388,8 +389,20 @@ bool HuntManager::AddProgress(Player* player, uint8 amount, std::string& message
     HuntDefinition const* h=GetDefinition(r.PreyId); if(!h){message="Hunt definition is missing.";return false;}
     uint8 old=r.TrackingProgress; r.TrackingProgress=static_cast<uint8>(std::min<uint32>(100, r.TrackingProgress+amount));
     uint8 threshold=GetNextAmbushThreshold(r,*h);
+    if(r.TrackingProgress>=100)
+    {
+        if (!LocateFinal(player, r))
+        {
+            // Never persist a FinalLocated state without a valid authored site.
+            // Keep tracking at 100% so the server can retry selection later.
+            SaveRuntime(r);
+            message="Tracking is complete, but no valid final hunt location is currently available.";
+            return false;
+        }
+        message="Tracking reached 100%.";
+        return true;
+    }
     SaveRuntime(r);
-    if(r.TrackingProgress>=100){LocateFinal(player,r); message="Tracking reached 100%.";return true;}
     if(old<threshold && r.TrackingProgress>=threshold && r.AmbushesCompleted<h->AmbushCount)
     {
         std::string ambush; SpawnPrey(player,r,false,ambush); message=ambush; return true;
@@ -705,28 +718,63 @@ void HuntManager::UpdatePreyAbilities(Player* player, HuntRuntime& runtime, Crea
     }
 }
 
-void HuntManager::LocateFinal(Player* player, HuntRuntime& r)
+bool HuntManager::SendFinalLocationPoi(Player* player, HuntRuntime const& r) const
 {
-    HuntFinalLocationDefinition const* l=SelectFinalLocation(r); if(!l) return;
-    r.TrackingProgress=100; r.FinalLocationId=l->Id; r.State=HuntState::FinalLocated; SaveRuntime(r);
-    std::string const locationName = ResolveFinalLocationName(player, *l);
-    ChatHandler(player->GetSession()).PSendSysMessage("|cff00ff00[LW Hunt]|r Your tracking is complete. {} has been located near {}.", GetDefinition(r.PreyId)->Name, locationName);
+    if (!player || !player->GetSession() || r.State != HuntState::FinalLocated || !r.FinalLocationId)
+        return false;
 
-    // 3.3.5a's normal guard-direction marker is SMSG_GOSSIP_POI.  Send the
-    // selected authored hunt location directly so Hunts do not need a client
-    // patch or a permanent points_of_interest row for every possible runtime.
+    HuntFinalLocationDefinition const* location = GetFinalLocation(r.FinalLocationId);
+    HuntDefinition const* hunt = GetDefinition(r.PreyId);
+    if (!location || !hunt || player->GetMapId() != location->MapId)
+        return false;
+
+    // SMSG_GOSSIP_POI is the same native 3.3.5a marker used by guard directions.
+    // The client removes it when the player gets close, so FinalLocated hunts
+    // periodically resend this packet until the prey is actually credited dead.
     WorldPacket poi(SMSG_GOSSIP_POI, 64);
-    poi << uint32(6);          // normal POI flags used by world-map/minimap markers
-    poi << float(l->X);
-    poi << float(l->Y);
-    poi << uint32(7);          // red "X"-style POI icon
-    poi << uint32(0);          // importance
-    std::string const poiName = std::string("Prey: ") + GetDefinition(r.PreyId)->Name;
-    poi << poiName;
+    poi << uint32(6);
+    poi << float(location->X);
+    poi << float(location->Y);
+    poi << uint32(7);
+    poi << uint32(0);
+    poi << std::string("Prey: ") + hunt->Name;
     player->GetSession()->SendPacket(&poi);
+    return true;
+}
 
-    ChatHandler(player->GetSession()).SendSysMessage("|cff00ff00[LW Hunt]|r The prey location has been marked on your map. Travel there and interact with the hunt marker to begin the final confrontation.");
-    EnsureFinalActivator(player, r);
+bool HuntManager::LocateFinal(Player* player, HuntRuntime& r)
+{
+    HuntFinalLocationDefinition const* location = SelectFinalLocation(r);
+    if (!location)
+    {
+        LOG_ERROR("server.loading", "[LW Hunt] Character {} reached final tracking for prey {} in zone {}, but no enabled final location is available.",
+            r.CharacterGuid, r.PreyId, r.ZoneId);
+        return false;
+    }
+
+    HuntDefinition const* hunt = GetDefinition(r.PreyId);
+    if (!hunt)
+        return false;
+
+    r.TrackingProgress = 100;
+    r.FinalLocationId = location->Id;
+    r.State = HuntState::FinalLocated;
+    SaveRuntime(r);
+
+    std::string const locationName = ResolveFinalLocationName(player, *location);
+    if (player && player->GetSession())
+    {
+        ChatHandler(player->GetSession()).PSendSysMessage(
+            "|cff00ff00[LW Hunt]|r Your tracking is complete. {} has been located near {}.",
+            hunt->Name, locationName);
+
+        SendFinalLocationPoi(player, r);
+        ChatHandler(player->GetSession()).SendSysMessage(
+            "|cff00ff00[LW Hunt]|r The prey location has been marked on your map. The marker will be refreshed until the quarry is slain.");
+        EnsureFinalActivator(player, r);
+    }
+
+    return true;
 }
 
 bool HuntManager::ForceAmbush(Player* player, std::string& message)
@@ -737,7 +785,11 @@ bool HuntManager::ForceAmbush(Player* player, std::string& message)
 bool HuntManager::ForceFinal(Player* player, std::string& message)
 {
     if(!player){message="Player required.";return false;} auto it=_runtimes.find(player->GetGUID().GetCounter()); if(it==_runtimes.end()){message="No active hunt.";return false;} HuntRuntime& r=it->second;
-    if(r.State==HuntState::Tracking) LocateFinal(player,r);
+    if(r.State==HuntState::Tracking && !LocateFinal(player,r))
+    {
+        message="No valid final hunt location is available for this hunt.";
+        return false;
+    }
     if(r.State!=HuntState::FinalLocated){message="The hunt is not ready for a final encounter.";return false;}
     if(!SpawnPrey(player,r,true,message)) return false;
     RemoveFinalActivator(player,r);
@@ -747,12 +799,42 @@ bool HuntManager::ForceFinal(Player* player, std::string& message)
 void HuntManager::Update(uint32 diff)
 {
     if(!_enabled) return; if(_updateTimerMs>diff){_updateTimerMs-=diff;return;} _updateTimerMs=250;
+
+    bool refreshFinalPoi = false;
+    if (_finalPoiRefreshTimerMs <= 250)
+    {
+        _finalPoiRefreshTimerMs = 5000;
+        refreshFinalPoi = true;
+    }
+    else
+        _finalPoiRefreshTimerMs -= 250;
+
     for(auto& [guid,r]:_runtimes)
     {
         Player* p=ObjectAccessor::FindConnectedPlayer(ObjectGuid::Create<HighGuid::Player>(guid)); if(!p) continue;
 
-        if(r.State==HuntState::FinalLocated && r.ActivePreyGuid.IsEmpty())
-            EnsureFinalActivator(p,r);
+        if (r.State == HuntState::FinalLocated)
+        {
+            // Self-heal the invalid state seen in live testing: state=FinalLocated
+            // with final_location_id=0 (or an ID removed from the authored data).
+            if (!r.FinalLocationId || !GetFinalLocation(r.FinalLocationId))
+            {
+                if (refreshFinalPoi)
+                {
+                    LOG_WARN("server.loading", "[LW Hunt] Repairing missing final location for character {} prey {} zone {}.",
+                        r.CharacterGuid, r.PreyId, r.ZoneId);
+                    LocateFinal(p, r);
+                }
+            }
+            else
+            {
+                if (refreshFinalPoi)
+                    SendFinalLocationPoi(p, r);
+
+                if (r.ActivePreyGuid.IsEmpty())
+                    EnsureFinalActivator(p,r);
+            }
+        }
 
         if(r.ActivePreyGuid.IsEmpty()) continue;
         Creature* prey=ObjectAccessor::GetCreature(*p,r.ActivePreyGuid);

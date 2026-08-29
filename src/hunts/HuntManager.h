@@ -173,7 +173,8 @@ private:
     std::string ResolveFinalLocationName(Player* player, HuntFinalLocationDefinition const& location) const;
     bool EnsureFinalActivator(Player* player, HuntRuntime& runtime);
     void RemoveFinalActivator(Player* player, HuntRuntime& runtime);
-    void LocateFinal(Player* player, HuntRuntime& runtime);
+    bool LocateFinal(Player* player, HuntRuntime& runtime);
+    bool SendFinalLocationPoi(Player* player, HuntRuntime const& runtime) const;
     uint8 GetNextAmbushThreshold(HuntRuntime const& runtime, HuntDefinition const& hunt) const;
     void InitializeAbilityTimers(HuntRuntime const& runtime, bool finalEncounter);
     void UpdatePreyAbilities(Player* player, HuntRuntime& runtime, Creature* prey, uint32 elapsedMs);
@@ -184,6 +185,7 @@ private:
     float _xpMultiplier = 0.75f;
     HuntSearchScope _searchScope = HuntSearchScope::World;
     uint32 _updateTimerMs = 0;
+    uint32 _finalPoiRefreshTimerMs = 0;
 
     std::unordered_map<uint32, HuntDefinition> _hunts;
     std::unordered_map<uint32, std::vector<HuntPreyAbilityDefinition>> _preyAbilities;
