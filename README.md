@@ -55,7 +55,7 @@ Living World (LW) is an AzerothCore module for SQL-authored dynamic world activi
 - Hunt prey kills remain exempt from the ordinary tracking eligibility check.
 - Adds the non-grey/XP-eligibility tracking rule; prey content is maintained in `910_beast_prey.sql`.
 
-**Current development version:** `0.6.0-dev`
+**Current development version:** `0.6.3-dev`
 
 
 ## Repository layout
@@ -188,6 +188,11 @@ Hunts now refuse to transition into the final-located state without a valid auth
 
 Hunt equipment rewards now use AzerothCore's `Player::CanUseItem()` as a hard eligibility check and then score usable items against the hunter's active talent tree. Armor rewards strongly prefer the class's intended armor material for the current level, weapon rewards account for spec-specific preferences (for example Assassination daggers, Combat one-handers, Enhancement melee weapons, and caster/healer weapons), and item stats are weighted by role. Rewards remain randomized among the strongest matching candidates, so a Hunt does not guarantee an upgrade; it should, however, feel like gear intended for the character rather than merely level-appropriate equipment.
 
+
+
+### 0.6.3-dev - Huntmaster hover cursor polish
+
+Huntmasters now explicitly use the stock 3.3.5a creature-template `IconName` value `Speak`, which gives the native chat-bubble mouse cursor on hover. Previously the Huntmaster templates inherited `IconName` from their city-guard visual shells, so most of them inherited `Directions` even though their `npcflag` was correctly gossip-only. No client patch or addon is required. Existing installations can apply `data/sql/db-world/updates/0.6.3_huntmaster_speak_cursor.sql`; clean installs receive the same setting from `903_huntmasters.sql`.
 
 ### 0.6.2-dev - reward spec identity scoring
 
