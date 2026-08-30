@@ -47,8 +47,7 @@ LivingWorld.Hunts.MinimumLevel = 10
 # Local regions are data-driven in 906_hunt_local_regions.sql and may overlap.
 LivingWorld.Hunts.SearchScope = 0
 
-# Multiplier applied to the eventual level-appropriate Hunt completion XP.
-# The reward code is intentionally deferred while the encounter loop is tested,
-# but the balance control is established now rather than hard-coded later.
+# Multiplier applied to level-appropriate Hunt completion XP.
+# Hunt rewards are active: XP, level-scaled gold, and an existing Blizzard item.
 # 0.0 = no Hunt completion XP, 0.75 = 75%, 1.0 = full baseline, 1.5 = 150%.
 LivingWorld.Hunts.XPMultiplier = 0.75

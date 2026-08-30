@@ -9,6 +9,8 @@
 #include "DBCStores.h"
 #include "Log.h"
 #include "Map.h"
+#include "ObjectMgr.h"
+#include "Item.h"
 #include "ObjectAccessor.h"
 #include "Opcodes.h"
 #include "Player.h"
@@ -16,6 +18,7 @@
 #include "TemporarySummon.h"
 #include "WorldPacket.h"
 #include "WorldSession.h"
+#include "World.h"
 #include "CreatureAI.h"
 
 #include <algorithm>
@@ -72,7 +75,7 @@ void HuntManager::LoadDefinitions()
         return;
 
     if (QueryResult result = WorldDatabase.Query(
-        "SELECT `id`,`name`,`min_level`,`max_level`,`prey_creature_entry`,`prey_lw_template_id`,`activation_gameobject_entry`,`ambush_health_multiplier`,`final_health_multiplier`,`escape_health_pct`,`ambush_count`,`enabled` FROM `lw_hunt_prey` WHERE `enabled`=1"))
+        "SELECT `id`,`name`,`min_level`,`max_level`,`prey_creature_entry`,`prey_lw_template_id`,`activation_gameobject_entry`,`ambush_health_multiplier`,`final_health_multiplier`,`reward_multiplier`,`escape_health_pct`,`ambush_count`,`enabled` FROM `lw_hunt_prey` WHERE `enabled`=1"))
     {
         do
         {
@@ -80,8 +83,8 @@ void HuntManager::LoadDefinitions()
             HuntDefinition d;
             d.Id=f[0].Get<uint32>(); d.Name=f[1].Get<std::string>(); d.MinLevel=f[2].Get<uint8>(); d.MaxLevel=f[3].Get<uint8>();
             d.PreyCreatureEntry=f[4].Get<uint32>(); d.PreyLwTemplateId=f[5].Get<uint32>(); d.ActivationGameObjectEntry=f[6].Get<uint32>();
-            d.AmbushHealthMultiplier=f[7].Get<float>(); d.FinalHealthMultiplier=f[8].Get<float>();
-            d.EscapeHealthPct=f[9].Get<uint8>(); d.AmbushCount=f[10].Get<uint8>(); d.Enabled=f[11].Get<uint8>()!=0;
+            d.AmbushHealthMultiplier=f[7].Get<float>(); d.FinalHealthMultiplier=f[8].Get<float>(); d.RewardMultiplier=std::max(0.0f, f[9].Get<float>());
+            d.EscapeHealthPct=f[10].Get<uint8>(); d.AmbushCount=f[11].Get<uint8>(); d.Enabled=f[12].Get<uint8>()!=0;
             _hunts[d.Id]=d;
         } while (result->NextRow());
     }
@@ -344,14 +347,129 @@ bool HuntManager::TurnInHunt(Player* player, Creature* giver, std::string& messa
     if(r.State!=HuntState::ReadyToTurnIn){message="Your quarry still lives.";return false;}
     if(r.GiverEntry!=giver->GetEntry() || (r.GiverSpawnId && r.GiverSpawnId!=giver->GetSpawnId())){message="Return to the Huntmaster who gave you this hunt.";return false;}
     HuntRuntime& mutableRuntime=it->second; RemoveFinalActivator(player,mutableRuntime);
+
+    HuntDefinition const* hunt = GetDefinition(r.PreyId);
+    float rewardMultiplier = hunt ? hunt->RewardMultiplier : 1.0f;
+
+    // Determine how many hunts were already completed today before this turn-in.
+    // Reward quality deliberately diminishes across repeated same-day hunts.
+    uint32 dailyCompletedBefore = 0;
+    if (QueryResult stats = CharacterDatabase.Query(
+        "SELECT IF(`daily_reset_date`=CURRENT_DATE(),`daily_completed`,0) FROM `lw_hunt_stats` WHERE `guid`={}", r.CharacterGuid))
+        dailyCompletedBefore = stats->Fetch()[0].Get<uint32>();
+
+    // XP baseline: 8% of the XP required for the player's current level, then
+    // apply the server-wide Hunt XP multiplier and the prey reward multiplier.
+    // This keeps Hunts useful while leaving normal questing as the default faster path.
+    uint32 xpReward = 0;
+    if (player->GetLevel() < sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL) && _xpMultiplier > 0.0f)
+    {
+        uint32 nextLevelXp = player->GetUInt32Value(PLAYER_NEXT_LEVEL_XP);
+        xpReward = static_cast<uint32>(std::round(nextLevelXp * 0.08f * _xpMultiplier * rewardMultiplier));
+        if (xpReward)
+            player->GiveXP(xpReward, nullptr, 1.0f);
+    }
+
+    // Gold scales quadratically with level: 20 copper * level^2 at 1.0x.
+    // Examples: level 10 = 20s, level 40 = 3g20s, level 80 = 12g80s.
+    uint32 level = player->GetLevel();
+    uint32 moneyReward = static_cast<uint32>(std::round(20.0f * level * level * rewardMultiplier));
+    if (moneyReward)
+        player->ModifyMoney(static_cast<int32>(moneyReward));
+
+    // Roll item quality. First hunt: 80/19/1 green/blue/epic. Repeated hunts
+    // progressively suppress high-quality rewards without removing item rewards.
+    uint32 qualityRoll = urand(1, 1000);
+    uint32 desiredQuality = ITEM_QUALITY_UNCOMMON;
+    if (dailyCompletedBefore == 0)
+        desiredQuality = qualityRoll <= 10 ? ITEM_QUALITY_EPIC : (qualityRoll <= 200 ? ITEM_QUALITY_RARE : ITEM_QUALITY_UNCOMMON);
+    else if (dailyCompletedBefore == 1)
+        desiredQuality = qualityRoll <= 5 ? ITEM_QUALITY_EPIC : (qualityRoll <= 120 ? ITEM_QUALITY_RARE : ITEM_QUALITY_UNCOMMON);
+    else if (dailyCompletedBefore == 2)
+        desiredQuality = qualityRoll <= 2 ? ITEM_QUALITY_EPIC : (qualityRoll <= 60 ? ITEM_QUALITY_RARE : ITEM_QUALITY_UNCOMMON);
+    else
+        desiredQuality = qualityRoll <= 20 ? ITEM_QUALITY_RARE : ITEM_QUALITY_UNCOMMON;
+
+    // Select an existing Blizzard weapon/armor item the class can use now.
+    // No custom client data is required. Keep the required level close to the
+    // hunter's current level so rewards are relevant instead of bank fodder.
+    std::vector<uint32> candidates;
+    uint32 classMask = 1u << (player->getClass() - 1);
+    uint32 minRequiredLevel = level > 5 ? level - 5 : 1;
+    for (auto const& [itemId, itemTemplate] : *sObjectMgr->GetItemTemplateStore())
+    {
+        if (itemTemplate.Quality != desiredQuality)
+            continue;
+        if (itemTemplate.Class != ITEM_CLASS_WEAPON && itemTemplate.Class != ITEM_CLASS_ARMOR)
+            continue;
+        if (itemTemplate.InventoryType == INVTYPE_NON_EQUIP || itemTemplate.InventoryType == INVTYPE_BAG)
+            continue;
+        if (itemTemplate.RequiredLevel > level || itemTemplate.RequiredLevel < minRequiredLevel)
+            continue;
+        if (itemTemplate.AllowableClass != -1 && !(static_cast<uint32>(itemTemplate.AllowableClass) & classMask))
+            continue;
+        candidates.push_back(itemId);
+    }
+
+    uint32 rewardedItemId = 0;
+    if (!candidates.empty())
+    {
+        rewardedItemId = candidates[urand(0, static_cast<uint32>(candidates.size() - 1))];
+        ItemPosCountVec dest;
+        InventoryResult storeResult = player->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, rewardedItemId, 1);
+        if (storeResult == EQUIP_ERR_OK)
+        {
+            if (Item* item = player->StoreNewItem(dest, rewardedItemId, true))
+                player->SendNewItem(item, 1, true, false);
+            else
+                rewardedItemId = 0;
+        }
+        else
+        {
+            // Do not block Hunt completion because the player's bags are full.
+            // The reward remains XP/gold; the message explains the missing item.
+            rewardedItemId = 0;
+        }
+    }
+
+    char const* qualityColumn = nullptr;
+    if (rewardedItemId)
+    {
+        if (desiredQuality == ITEM_QUALITY_EPIC) qualityColumn = "epics_received";
+        else if (desiredQuality == ITEM_QUALITY_RARE) qualityColumn = "blues_received";
+        else qualityColumn = "greens_received";
+    }
+
     std::ostringstream statsSql;
-    statsSql << "INSERT INTO `lw_hunt_stats` (`guid`,`total_completed`,`daily_completed`,`daily_reset_date`,`last_completed_at`) "
-             << "VALUES (" << r.CharacterGuid << ",1,1,CURRENT_DATE(),CURRENT_TIMESTAMP()) "
+    statsSql << "INSERT INTO `lw_hunt_stats` (`guid`,`total_completed`,`daily_completed`,`daily_reset_date`,`greens_received`,`blues_received`,`epics_received`,`last_completed_at`) "
+             << "VALUES (" << r.CharacterGuid << ",1,1,CURRENT_DATE(),"
+             << (qualityColumn && std::string(qualityColumn)=="greens_received" ? 1 : 0) << ","
+             << (qualityColumn && std::string(qualityColumn)=="blues_received" ? 1 : 0) << ","
+             << (qualityColumn && std::string(qualityColumn)=="epics_received" ? 1 : 0) << ",CURRENT_TIMESTAMP()) "
              << "ON DUPLICATE KEY UPDATE `total_completed`=`total_completed`+1, "
              << "`daily_completed`=IF(`daily_reset_date`=CURRENT_DATE(),`daily_completed`+1,1), "
-             << "`daily_reset_date`=CURRENT_DATE(),`last_completed_at`=CURRENT_TIMESTAMP()";
+             << "`daily_reset_date`=CURRENT_DATE(),";
+    if (qualityColumn)
+        statsSql << "`" << qualityColumn << "`=`" << qualityColumn << "`+1,";
+    statsSql << "`last_completed_at`=CURRENT_TIMESTAMP()";
     CharacterDatabase.DirectExecute(statsSql.str().c_str());
-    DeleteRuntime(r.CharacterGuid); message="A fine hunt. Your kill has been added to your hunting record."; return true;
+
+    std::ostringstream rewardMessage;
+    rewardMessage << "A fine hunt. Reward: ";
+    if (xpReward) rewardMessage << xpReward << " XP, ";
+    rewardMessage << (moneyReward / 10000) << "g " << ((moneyReward / 100) % 100) << "s " << (moneyReward % 100) << "c";
+    if (rewardedItemId)
+    {
+        if (ItemTemplate const* rewardTemplate = sObjectMgr->GetItemTemplate(rewardedItemId))
+            rewardMessage << ", and " << rewardTemplate->Name1;
+    }
+    else if (candidates.empty())
+        rewardMessage << ". No suitable item reward was found for this level/quality roll";
+    else
+        rewardMessage << ". Your bags were too full for the item reward";
+    rewardMessage << ".";
+
+    DeleteRuntime(r.CharacterGuid); message=rewardMessage.str(); return true;
 }
 
 uint8 HuntManager::GetNextAmbushThreshold(HuntRuntime const& r, HuntDefinition const& h) const

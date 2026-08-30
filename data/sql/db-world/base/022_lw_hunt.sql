@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS `lw_hunt_prey` (
   `activation_gameobject_entry` INT UNSIGNED NOT NULL DEFAULT 0,
   `ambush_health_multiplier` FLOAT NOT NULL DEFAULT 4.0,
   `final_health_multiplier` FLOAT NOT NULL DEFAULT 6.0,
+  `reward_multiplier` FLOAT NOT NULL DEFAULT 1.0,
   `escape_health_pct` TINYINT UNSIGNED NOT NULL DEFAULT 50,
   `ambush_count` TINYINT UNSIGNED NOT NULL DEFAULT 2,
   `enabled` TINYINT UNSIGNED NOT NULL DEFAULT 1,

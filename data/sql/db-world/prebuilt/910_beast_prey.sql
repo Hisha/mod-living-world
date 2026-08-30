@@ -32,23 +32,23 @@ INSERT INTO `lw_creature_template`
 
 INSERT INTO `lw_hunt_prey`
  (`id`,`name`,`min_level`,`max_level`,`prey_creature_entry`,`prey_lw_template_id`,`activation_gameobject_entry`,
-  `ambush_health_multiplier`,`final_health_multiplier`,`escape_health_pct`,`ambush_count`,`enabled`,`comment`) VALUES
-(1,'Ashfang',10,80,0,1000,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,50,2,1,'Bleed/frenzy wolf.'),
-(2,'Silkmaw',10,80,0,1001,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,50,2,1,'Web/poison spider.'),
-(3,'Gorehide',10,80,0,1002,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,50,2,1,'Charging boar.'),
-(4,'Whiteclaw',10,80,0,1003,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,50,2,1,'Knockdown/roar bear.'),
-(5,'Tidefang',10,80,0,1004,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,50,2,1,'Thrashing shoreline terror.'),
-(6,'Stonegut',10,80,0,1005,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,50,2,1,'Knockdown/thrash brute.'),
-(7,'Sootfang',10,80,0,1006,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,50,2,1,'Roaring/frenzied bear.'),
-(8,'Nightfang',10,80,0,1007,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,50,2,1,'Bleed/frenzy wolf.'),
-(9,'Shadowclaw',10,80,0,1008,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,50,2,1,'Bleeding jungle cat.'),
-(10,'Dreadwing',10,80,0,1009,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,50,2,1,'Silencing/fear bat.'),
-(11,'Venomtail',10,80,0,1010,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,50,2,1,'Poisonous scorpid.'),
-(12,'Stormcoil',10,80,0,1011,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,50,2,1,'Fast-striking wind serpent.'),
-(13,'Mirejaw',10,80,0,1012,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,50,2,1,'Knockdown crocolisk.'),
-(14,'Razortalon',10,80,0,1013,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,50,2,1,'Bleed/thrash raptor.'),
-(15,'Cliffhowl',10,80,0,1014,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,50,2,1,'Fear/bleed wolf.'),
-(16,'Grimmaw',10,80,0,1015,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,50,2,1,'Knockdown/enrage bear.');
+  `ambush_health_multiplier`,`final_health_multiplier`,`reward_multiplier`,`escape_health_pct`,`ambush_count`,`enabled`,`comment`) VALUES
+(1,'Ashfang',10,80,0,1000,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,1.0,50,2,1,'Bleed/frenzy wolf.'),
+(2,'Silkmaw',10,80,0,1001,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,1.0,50,2,1,'Web/poison spider.'),
+(3,'Gorehide',10,80,0,1002,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,1.0,50,2,1,'Charging boar.'),
+(4,'Whiteclaw',10,80,0,1003,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,1.0,50,2,1,'Knockdown/roar bear.'),
+(5,'Tidefang',10,80,0,1004,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,1.0,50,2,1,'Thrashing shoreline terror.'),
+(6,'Stonegut',10,80,0,1005,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,1.0,50,2,1,'Knockdown/thrash brute.'),
+(7,'Sootfang',10,80,0,1006,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,1.0,50,2,1,'Roaring/frenzied bear.'),
+(8,'Nightfang',10,80,0,1007,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,1.0,50,2,1,'Bleed/frenzy wolf.'),
+(9,'Shadowclaw',10,80,0,1008,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,1.0,50,2,1,'Bleeding jungle cat.'),
+(10,'Dreadwing',10,80,0,1009,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,1.0,50,2,1,'Silencing/fear bat.'),
+(11,'Venomtail',10,80,0,1010,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,1.0,50,2,1,'Poisonous scorpid.'),
+(12,'Stormcoil',10,80,0,1011,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,1.0,50,2,1,'Fast-striking wind serpent.'),
+(13,'Mirejaw',10,80,0,1012,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,1.0,50,2,1,'Knockdown crocolisk.'),
+(14,'Razortalon',10,80,0,1013,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,1.0,50,2,1,'Bleed/thrash raptor.'),
+(15,'Cliffhowl',10,80,0,1014,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,1.0,50,2,1,'Fear/bleed wolf.'),
+(16,'Grimmaw',10,80,0,1015,@HUNT_ACTIVATOR_ENTRY,4.0,6.0,1.0,50,2,1,'Knockdown/enrage bear.');
 
 -- target: 0=victim, 1=self. encounter_mask: 1=ambush, 2=final, 3=both.
 -- Spell IDs below are existing 3.3.5a creature abilities. Long cooldowns keep

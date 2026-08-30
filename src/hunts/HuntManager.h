@@ -55,6 +55,7 @@ struct HuntDefinition
     uint32 ActivationGameObjectEntry = 0;
     float AmbushHealthMultiplier = 4.0f;
     float FinalHealthMultiplier = 6.0f;
+    float RewardMultiplier = 1.0f;
     uint8 EscapeHealthPct = 50;
     uint8 AmbushCount = 2;
     bool Enabled = false;

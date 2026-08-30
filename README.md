@@ -1,3 +1,7 @@
+## 0.6.0-dev Hunt rewards
+
+Hunt turn-ins now award level-scaled XP, gold, and a class-usable existing Blizzard equipment item. Reward quality diminishes with repeated same-day hunts, and prey definitions have a data-driven `reward_multiplier`. No client patch is required.
+
 ## 0.5.9-dev Group Hunt tracking credit
 
 - Ordinary Hunt tracking kills now grant progress to nearby members of the killer's group who are actively tracking the same zone.
@@ -51,7 +55,7 @@ Living World (LW) is an AzerothCore module for SQL-authored dynamic world activi
 - Hunt prey kills remain exempt from the ordinary tracking eligibility check.
 - Adds the non-grey/XP-eligibility tracking rule; prey content is maintained in `910_beast_prey.sql`.
 
-**Current development version:** `0.5.9-dev`
+**Current development version:** `0.6.0-dev`
 
 
 ## Repository layout
@@ -163,7 +167,7 @@ Useful GM/debug commands:
 ```
 
 
-## Hunt system (0.5.9-dev)
+## Hunt system (0.6.0-dev)
 
 The Hunt world rollout now includes 10 permanent Huntmasters (the eight racial capitals plus neutral Shattrath and Dalaran) and three curated final encounter sites for every enabled Eastern Kingdoms hunt zone. Final-site sub-area names are resolved from AreaTable.dbc at runtime when no explicit location name is authored.
 
