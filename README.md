@@ -183,3 +183,7 @@ Hunts are an optional Living World subsystem with permanent Huntmasters in the e
 ### 0.5.5 final-location recovery
 
 Hunts now refuse to transition into the final-located state without a valid authored final location. Existing runtimes found in `FinalLocated` with a missing/invalid `final_location_id` are automatically repaired. The native guard-style POI for final prey is resent every five seconds while the hunt remains in the final-located state, including after the crystal has been activated, and stops only after the prey kill is credited.
+
+### 0.6.1-dev - spec-aware Hunt rewards
+
+Hunt equipment rewards now use AzerothCore's `Player::CanUseItem()` as a hard eligibility check and then score usable items against the hunter's active talent tree. Armor rewards strongly prefer the class's intended armor material for the current level, weapon rewards account for spec-specific preferences (for example Assassination daggers, Combat one-handers, Enhancement melee weapons, and caster/healer weapons), and item stats are weighted by role. Rewards remain randomized among the strongest matching candidates, so a Hunt does not guarantee an upgrade; it should, however, feel like gear intended for the character rather than merely level-appropriate equipment.

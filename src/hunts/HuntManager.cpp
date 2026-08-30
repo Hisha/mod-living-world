@@ -26,6 +26,324 @@
 #include <limits>
 #include <sstream>
 
+
+namespace
+{
+enum class RewardRole
+{
+    Generic,
+    StrengthMelee,
+    AgilityMelee,
+    HunterRanged,
+    SpellDamage,
+    Healer,
+    Tank
+};
+
+RewardRole GetRewardRole(Player* player, uint32 spec)
+{
+    switch (spec)
+    {
+        case TALENT_TREE_WARRIOR_PROTECTION:
+        case TALENT_TREE_PALADIN_PROTECTION:
+        case TALENT_TREE_DEATH_KNIGHT_BLOOD:
+            return RewardRole::Tank;
+
+        case TALENT_TREE_WARRIOR_ARMS:
+        case TALENT_TREE_WARRIOR_FURY:
+        case TALENT_TREE_PALADIN_RETRIBUTION:
+        case TALENT_TREE_DEATH_KNIGHT_FROST:
+        case TALENT_TREE_DEATH_KNIGHT_UNHOLY:
+            return RewardRole::StrengthMelee;
+
+        case TALENT_TREE_ROGUE_ASSASSINATION:
+        case TALENT_TREE_ROGUE_COMBAT:
+        case TALENT_TREE_ROGUE_SUBTLETY:
+        case TALENT_TREE_SHAMAN_ENHANCEMENT:
+        case TALENT_TREE_DRUID_FERAL_COMBAT:
+            return RewardRole::AgilityMelee;
+
+        case TALENT_TREE_HUNTER_BEAST_MASTERY:
+        case TALENT_TREE_HUNTER_MARKSMANSHIP:
+        case TALENT_TREE_HUNTER_SURVIVAL:
+            return RewardRole::HunterRanged;
+
+        case TALENT_TREE_PALADIN_HOLY:
+        case TALENT_TREE_PRIEST_DISCIPLINE:
+        case TALENT_TREE_PRIEST_HOLY:
+        case TALENT_TREE_SHAMAN_RESTORATION:
+        case TALENT_TREE_DRUID_RESTORATION:
+            return RewardRole::Healer;
+
+        case TALENT_TREE_PRIEST_SHADOW:
+        case TALENT_TREE_SHAMAN_ELEMENTAL:
+        case TALENT_TREE_MAGE_ARCANE:
+        case TALENT_TREE_MAGE_FIRE:
+        case TALENT_TREE_MAGE_FROST:
+        case TALENT_TREE_WARLOCK_AFFLICTION:
+        case TALENT_TREE_WARLOCK_DEMONOLOGY:
+        case TALENT_TREE_WARLOCK_DESTRUCTION:
+        case TALENT_TREE_DRUID_BALANCE:
+            return RewardRole::SpellDamage;
+        default:
+            break;
+    }
+
+    // Characters with too few talent points to establish a tree still get a
+    // class-appropriate baseline instead of fully random equipment.
+    switch (player->getClass())
+    {
+        case CLASS_ROGUE: return RewardRole::AgilityMelee;
+        case CLASS_HUNTER: return RewardRole::HunterRanged;
+        case CLASS_MAGE:
+        case CLASS_WARLOCK:
+        case CLASS_PRIEST: return RewardRole::SpellDamage;
+        case CLASS_WARRIOR:
+        case CLASS_PALADIN:
+        case CLASS_DEATH_KNIGHT: return RewardRole::StrengthMelee;
+        case CLASS_SHAMAN:
+        case CLASS_DRUID: return RewardRole::Generic;
+        default: return RewardRole::Generic;
+    }
+}
+
+float GetRewardStatWeight(RewardRole role, uint32 stat)
+{
+    switch (role)
+    {
+        case RewardRole::StrengthMelee:
+            switch (stat)
+            {
+                case ITEM_MOD_STRENGTH: return 1.00f;
+                case ITEM_MOD_ATTACK_POWER: return 0.50f;
+                case ITEM_MOD_CRIT_RATING:
+                case ITEM_MOD_CRIT_MELEE_RATING: return 0.70f;
+                case ITEM_MOD_HIT_RATING:
+                case ITEM_MOD_HIT_MELEE_RATING: return 0.75f;
+                case ITEM_MOD_EXPERTISE_RATING: return 0.75f;
+                case ITEM_MOD_HASTE_RATING:
+                case ITEM_MOD_HASTE_MELEE_RATING: return 0.55f;
+                case ITEM_MOD_ARMOR_PENETRATION_RATING: return 0.55f;
+                case ITEM_MOD_STAMINA: return 0.20f;
+                default: return 0.0f;
+            }
+        case RewardRole::AgilityMelee:
+            switch (stat)
+            {
+                case ITEM_MOD_AGILITY: return 1.00f;
+                case ITEM_MOD_ATTACK_POWER: return 0.50f;
+                case ITEM_MOD_CRIT_RATING:
+                case ITEM_MOD_CRIT_MELEE_RATING: return 0.75f;
+                case ITEM_MOD_HIT_RATING:
+                case ITEM_MOD_HIT_MELEE_RATING: return 0.75f;
+                case ITEM_MOD_EXPERTISE_RATING: return 0.70f;
+                case ITEM_MOD_HASTE_RATING:
+                case ITEM_MOD_HASTE_MELEE_RATING: return 0.55f;
+                case ITEM_MOD_ARMOR_PENETRATION_RATING: return 0.50f;
+                case ITEM_MOD_STAMINA: return 0.20f;
+                default: return 0.0f;
+            }
+        case RewardRole::HunterRanged:
+            switch (stat)
+            {
+                case ITEM_MOD_AGILITY: return 1.00f;
+                case ITEM_MOD_ATTACK_POWER:
+                case ITEM_MOD_RANGED_ATTACK_POWER: return 0.50f;
+                case ITEM_MOD_CRIT_RATING:
+                case ITEM_MOD_CRIT_RANGED_RATING: return 0.75f;
+                case ITEM_MOD_HIT_RATING:
+                case ITEM_MOD_HIT_RANGED_RATING: return 0.75f;
+                case ITEM_MOD_HASTE_RATING:
+                case ITEM_MOD_HASTE_RANGED_RATING: return 0.55f;
+                case ITEM_MOD_INTELLECT: return 0.25f;
+                case ITEM_MOD_STAMINA: return 0.15f;
+                default: return 0.0f;
+            }
+        case RewardRole::SpellDamage:
+            switch (stat)
+            {
+                case ITEM_MOD_SPELL_POWER: return 1.00f;
+                case ITEM_MOD_INTELLECT: return 0.75f;
+                case ITEM_MOD_HIT_RATING:
+                case ITEM_MOD_HIT_SPELL_RATING: return 0.70f;
+                case ITEM_MOD_CRIT_RATING:
+                case ITEM_MOD_CRIT_SPELL_RATING: return 0.65f;
+                case ITEM_MOD_HASTE_RATING:
+                case ITEM_MOD_HASTE_SPELL_RATING: return 0.70f;
+                case ITEM_MOD_SPIRIT: return 0.30f;
+                case ITEM_MOD_MANA_REGENERATION: return 0.25f;
+                case ITEM_MOD_STAMINA: return 0.10f;
+                default: return 0.0f;
+            }
+        case RewardRole::Healer:
+            switch (stat)
+            {
+                case ITEM_MOD_SPELL_POWER: return 1.00f;
+                case ITEM_MOD_INTELLECT: return 0.85f;
+                case ITEM_MOD_MANA_REGENERATION: return 0.80f;
+                case ITEM_MOD_HASTE_RATING:
+                case ITEM_MOD_HASTE_SPELL_RATING: return 0.70f;
+                case ITEM_MOD_CRIT_RATING:
+                case ITEM_MOD_CRIT_SPELL_RATING: return 0.50f;
+                case ITEM_MOD_SPIRIT: return 0.45f;
+                case ITEM_MOD_STAMINA: return 0.10f;
+                default: return 0.0f;
+            }
+        case RewardRole::Tank:
+            switch (stat)
+            {
+                case ITEM_MOD_STAMINA: return 1.00f;
+                case ITEM_MOD_DEFENSE_SKILL_RATING: return 0.90f;
+                case ITEM_MOD_DODGE_RATING:
+                case ITEM_MOD_PARRY_RATING:
+                case ITEM_MOD_BLOCK_RATING: return 0.75f;
+                case ITEM_MOD_BLOCK_VALUE: return 0.65f;
+                case ITEM_MOD_STRENGTH: return 0.55f;
+                case ITEM_MOD_HIT_RATING:
+                case ITEM_MOD_HIT_MELEE_RATING:
+                case ITEM_MOD_EXPERTISE_RATING: return 0.35f;
+                default: return 0.0f;
+            }
+        default:
+            return stat == ITEM_MOD_STAMINA ? 0.15f : 0.0f;
+    }
+}
+
+float GetArmorPreference(Player* player, ItemTemplate const& item)
+{
+    if (item.Class != ITEM_CLASS_ARMOR)
+        return 0.0f;
+
+    // Cloaks, rings, trinkets, necklaces and relics are not governed by armor
+    // material preference. CanUseItem() still validates their real restrictions.
+    if (item.InventoryType == INVTYPE_CLOAK || item.InventoryType == INVTYPE_NECK ||
+        item.InventoryType == INVTYPE_FINGER || item.InventoryType == INVTYPE_TRINKET ||
+        item.InventoryType == INVTYPE_RELIC || item.InventoryType == INVTYPE_SHIELD ||
+        item.InventoryType == INVTYPE_HOLDABLE)
+        return 12.0f;
+
+    uint32 wantedSubclass = ITEM_SUBCLASS_ARMOR_CLOTH;
+    switch (player->getClass())
+    {
+        case CLASS_ROGUE:
+        case CLASS_DRUID:
+            wantedSubclass = ITEM_SUBCLASS_ARMOR_LEATHER;
+            break;
+        case CLASS_HUNTER:
+        case CLASS_SHAMAN:
+            wantedSubclass = player->GetLevel() >= 40 ? ITEM_SUBCLASS_ARMOR_MAIL : ITEM_SUBCLASS_ARMOR_LEATHER;
+            break;
+        case CLASS_WARRIOR:
+        case CLASS_PALADIN:
+            wantedSubclass = player->GetLevel() >= 40 ? ITEM_SUBCLASS_ARMOR_PLATE : ITEM_SUBCLASS_ARMOR_MAIL;
+            break;
+        case CLASS_DEATH_KNIGHT:
+            wantedSubclass = ITEM_SUBCLASS_ARMOR_PLATE;
+            break;
+        default:
+            wantedSubclass = ITEM_SUBCLASS_ARMOR_CLOTH;
+            break;
+    }
+
+    if (item.SubClass == wantedSubclass)
+        return 30.0f;
+
+    // It may be technically equipable (for example, cloth on a rogue), but it
+    // should almost never beat gear of the class's intended armor type.
+    return -30.0f;
+}
+
+float GetWeaponPreference(Player* player, uint32 spec, ItemTemplate const& item)
+{
+    if (item.Class != ITEM_CLASS_WEAPON)
+        return 0.0f;
+
+    float score = 0.0f;
+    switch (spec)
+    {
+        case TALENT_TREE_ROGUE_ASSASSINATION:
+            score += item.SubClass == ITEM_SUBCLASS_WEAPON_DAGGER ? 45.0f : -20.0f;
+            break;
+        case TALENT_TREE_ROGUE_SUBTLETY:
+            score += item.SubClass == ITEM_SUBCLASS_WEAPON_DAGGER ? 35.0f : 0.0f;
+            break;
+        case TALENT_TREE_ROGUE_COMBAT:
+            if (item.SubClass == ITEM_SUBCLASS_WEAPON_SWORD || item.SubClass == ITEM_SUBCLASS_WEAPON_AXE ||
+                item.SubClass == ITEM_SUBCLASS_WEAPON_MACE || item.SubClass == ITEM_SUBCLASS_WEAPON_FIST ||
+                item.SubClass == ITEM_SUBCLASS_WEAPON_DAGGER)
+                score += 30.0f;
+            break;
+        case TALENT_TREE_SHAMAN_ENHANCEMENT:
+            if (item.SubClass == ITEM_SUBCLASS_WEAPON_AXE || item.SubClass == ITEM_SUBCLASS_WEAPON_MACE ||
+                item.SubClass == ITEM_SUBCLASS_WEAPON_FIST)
+                score += 35.0f;
+            else
+                score -= 15.0f;
+            break;
+        case TALENT_TREE_WARRIOR_ARMS:
+        case TALENT_TREE_PALADIN_RETRIBUTION:
+        case TALENT_TREE_DEATH_KNIGHT_UNHOLY:
+            score += item.InventoryType == INVTYPE_2HWEAPON ? 35.0f : 0.0f;
+            break;
+        case TALENT_TREE_WARRIOR_PROTECTION:
+        case TALENT_TREE_PALADIN_PROTECTION:
+            score += (item.InventoryType == INVTYPE_WEAPON || item.InventoryType == INVTYPE_WEAPONMAINHAND) ? 30.0f : -15.0f;
+            break;
+        case TALENT_TREE_HUNTER_BEAST_MASTERY:
+        case TALENT_TREE_HUNTER_MARKSMANSHIP:
+        case TALENT_TREE_HUNTER_SURVIVAL:
+            if (item.SubClass == ITEM_SUBCLASS_WEAPON_BOW || item.SubClass == ITEM_SUBCLASS_WEAPON_GUN ||
+                item.SubClass == ITEM_SUBCLASS_WEAPON_CROSSBOW)
+                score += 45.0f;
+            break;
+        case TALENT_TREE_PRIEST_DISCIPLINE:
+        case TALENT_TREE_PRIEST_HOLY:
+        case TALENT_TREE_PRIEST_SHADOW:
+        case TALENT_TREE_SHAMAN_ELEMENTAL:
+        case TALENT_TREE_SHAMAN_RESTORATION:
+        case TALENT_TREE_MAGE_ARCANE:
+        case TALENT_TREE_MAGE_FIRE:
+        case TALENT_TREE_MAGE_FROST:
+        case TALENT_TREE_WARLOCK_AFFLICTION:
+        case TALENT_TREE_WARLOCK_DEMONOLOGY:
+        case TALENT_TREE_WARLOCK_DESTRUCTION:
+        case TALENT_TREE_DRUID_BALANCE:
+        case TALENT_TREE_DRUID_RESTORATION:
+            if (item.SubClass == ITEM_SUBCLASS_WEAPON_STAFF || item.SubClass == ITEM_SUBCLASS_WEAPON_DAGGER ||
+                item.SubClass == ITEM_SUBCLASS_WEAPON_MACE || item.SubClass == ITEM_SUBCLASS_WEAPON_SWORD ||
+                item.SubClass == ITEM_SUBCLASS_WEAPON_WAND)
+                score += 25.0f;
+            break;
+        default:
+            break;
+    }
+
+    return score;
+}
+
+float ScoreRewardItem(Player* player, uint32 spec, RewardRole role, ItemTemplate const& item)
+{
+    float score = 0.0f;
+
+    // Being near the hunter's level matters, but it is intentionally weaker
+    // than spec/stat suitability. A useful level-12 item beats a nonsense
+    // level-15 item for a level-15 hunter.
+    int32 levelGap = static_cast<int32>(player->GetLevel()) - static_cast<int32>(item.RequiredLevel);
+    score += std::max(0.0f, 15.0f - static_cast<float>(std::max(0, levelGap)) * 2.0f);
+    score += GetArmorPreference(player, item);
+    score += GetWeaponPreference(player, spec, item);
+
+    for (uint32 i = 0; i < item.StatsCount && i < MAX_ITEM_PROTO_STATS; ++i)
+    {
+        if (item.ItemStat[i].ItemStatValue <= 0)
+            continue;
+        score += GetRewardStatWeight(role, item.ItemStat[i].ItemStatType) * static_cast<float>(item.ItemStat[i].ItemStatValue);
+    }
+
+    return score;
+}
+}
+
 namespace lw
 {
 HuntManager& HuntManager::Instance()
@@ -390,25 +708,61 @@ bool HuntManager::TurnInHunt(Player* player, Creature* giver, std::string& messa
     else
         desiredQuality = qualityRoll <= 20 ? ITEM_QUALITY_RARE : ITEM_QUALITY_UNCOMMON;
 
-    // Select an existing Blizzard weapon/armor item the class can use now.
-    // No custom client data is required. Keep the required level close to the
-    // hunter's current level so rewards are relevant instead of bank fodder.
-    std::vector<uint32> candidates;
-    uint32 classMask = 1u << (player->getClass() - 1);
+    // Build a spec-aware pool from existing Blizzard equipment. First use the
+    // core's own CanUseItem() rules as a hard gate (proficiency, class, level,
+    // skill/reputation requirements, etc.), then score the survivors for the
+    // hunter's active talent tree. This deliberately prefers the right *type*
+    // of gear without requiring every Hunt reward to be an upgrade.
+    struct ScoredRewardItem
+    {
+        uint32 ItemId = 0;
+        float Score = 0.0f;
+    };
+
+    std::vector<ScoredRewardItem> scoredCandidates;
     uint32 minRequiredLevel = level > 5 ? level - 5 : 1;
+    uint32 activeTalentTree = player->GetSpec();
+    RewardRole rewardRole = GetRewardRole(player, activeTalentTree);
+
     for (auto const& [itemId, itemTemplate] : *sObjectMgr->GetItemTemplateStore())
     {
         if (itemTemplate.Quality != desiredQuality)
             continue;
         if (itemTemplate.Class != ITEM_CLASS_WEAPON && itemTemplate.Class != ITEM_CLASS_ARMOR)
             continue;
-        if (itemTemplate.InventoryType == INVTYPE_NON_EQUIP || itemTemplate.InventoryType == INVTYPE_BAG)
+        if (itemTemplate.InventoryType == INVTYPE_NON_EQUIP || itemTemplate.InventoryType == INVTYPE_BAG ||
+            itemTemplate.InventoryType == INVTYPE_TABARD || itemTemplate.InventoryType == INVTYPE_AMMO ||
+            itemTemplate.InventoryType == INVTYPE_QUIVER)
             continue;
         if (itemTemplate.RequiredLevel > level || itemTemplate.RequiredLevel < minRequiredLevel)
             continue;
-        if (itemTemplate.AllowableClass != -1 && !(static_cast<uint32>(itemTemplate.AllowableClass) & classMask))
+        if (player->CanUseItem(&itemTemplate) != EQUIP_ERR_OK)
             continue;
-        candidates.push_back(itemId);
+
+        scoredCandidates.push_back({itemId, ScoreRewardItem(player, activeTalentTree, rewardRole, itemTemplate)});
+    }
+
+    std::sort(scoredCandidates.begin(), scoredCandidates.end(), [](ScoredRewardItem const& a, ScoredRewardItem const& b)
+    {
+        return a.Score > b.Score;
+    });
+
+    // Keep some randomness so Hunt rewards do not collapse into the same item
+    // every time. Pick from the strongest slice of the appropriate pool.
+    std::vector<uint32> candidates;
+    if (!scoredCandidates.empty())
+    {
+        float bestScore = scoredCandidates.front().Score;
+        float cutoff = bestScore - 12.0f;
+        for (ScoredRewardItem const& candidate : scoredCandidates)
+        {
+            if (candidate.Score < cutoff || candidates.size() >= 12)
+                break;
+            candidates.push_back(candidate.ItemId);
+        }
+
+        if (candidates.empty())
+            candidates.push_back(scoredCandidates.front().ItemId);
     }
 
     uint32 rewardedItemId = 0;
