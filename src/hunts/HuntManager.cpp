@@ -321,6 +321,66 @@ float GetWeaponPreference(Player* player, uint32 spec, ItemTemplate const& item)
     return score;
 }
 
+bool IsRewardIdentityStat(RewardRole role, uint32 stat)
+{
+    switch (role)
+    {
+        case RewardRole::StrengthMelee:
+            return stat == ITEM_MOD_STRENGTH || stat == ITEM_MOD_ATTACK_POWER;
+        case RewardRole::AgilityMelee:
+            return stat == ITEM_MOD_AGILITY || stat == ITEM_MOD_ATTACK_POWER;
+        case RewardRole::HunterRanged:
+            return stat == ITEM_MOD_AGILITY || stat == ITEM_MOD_ATTACK_POWER || stat == ITEM_MOD_RANGED_ATTACK_POWER;
+        case RewardRole::SpellDamage:
+            return stat == ITEM_MOD_SPELL_POWER || stat == ITEM_MOD_INTELLECT;
+        case RewardRole::Healer:
+            return stat == ITEM_MOD_SPELL_POWER || stat == ITEM_MOD_INTELLECT ||
+                stat == ITEM_MOD_MANA_REGENERATION || stat == ITEM_MOD_SPIRIT;
+        case RewardRole::Tank:
+            return stat == ITEM_MOD_STAMINA || stat == ITEM_MOD_DEFENSE_SKILL_RATING ||
+                stat == ITEM_MOD_DODGE_RATING || stat == ITEM_MOD_PARRY_RATING ||
+                stat == ITEM_MOD_BLOCK_RATING || stat == ITEM_MOD_BLOCK_VALUE;
+        default:
+            return true;
+    }
+}
+
+float GetRewardWrongDirectionPenalty(RewardRole role, uint32 stat, int32 value)
+{
+    if (value <= 0)
+        return 0.0f;
+
+    float amount = static_cast<float>(value);
+    switch (role)
+    {
+        case RewardRole::StrengthMelee:
+            if (stat == ITEM_MOD_INTELLECT || stat == ITEM_MOD_SPIRIT || stat == ITEM_MOD_SPELL_POWER ||
+                stat == ITEM_MOD_MANA_REGENERATION)
+                return -std::min(20.0f, amount * 0.75f);
+            break;
+        case RewardRole::AgilityMelee:
+        case RewardRole::HunterRanged:
+            if (stat == ITEM_MOD_STRENGTH || stat == ITEM_MOD_SPIRIT || stat == ITEM_MOD_SPELL_POWER ||
+                stat == ITEM_MOD_MANA_REGENERATION)
+                return -std::min(20.0f, amount * 0.75f);
+            break;
+        case RewardRole::SpellDamage:
+        case RewardRole::Healer:
+            if (stat == ITEM_MOD_STRENGTH || stat == ITEM_MOD_AGILITY || stat == ITEM_MOD_ATTACK_POWER ||
+                stat == ITEM_MOD_RANGED_ATTACK_POWER)
+                return -std::min(25.0f, amount * 0.85f);
+            break;
+        case RewardRole::Tank:
+            if (stat == ITEM_MOD_SPIRIT || stat == ITEM_MOD_SPELL_POWER || stat == ITEM_MOD_MANA_REGENERATION)
+                return -std::min(15.0f, amount * 0.60f);
+            break;
+        default:
+            break;
+    }
+
+    return 0.0f;
+}
+
 float ScoreRewardItem(Player* player, uint32 spec, RewardRole role, ItemTemplate const& item)
 {
     float score = 0.0f;
@@ -333,11 +393,36 @@ float ScoreRewardItem(Player* player, uint32 spec, RewardRole role, ItemTemplate
     score += GetArmorPreference(player, item);
     score += GetWeaponPreference(player, spec, item);
 
+    bool hasIdentityStat = role == RewardRole::Generic;
+    bool hasAnyPositiveStat = false;
     for (uint32 i = 0; i < item.StatsCount && i < MAX_ITEM_PROTO_STATS; ++i)
     {
-        if (item.ItemStat[i].ItemStatValue <= 0)
+        int32 value = item.ItemStat[i].ItemStatValue;
+        if (value <= 0)
             continue;
-        score += GetRewardStatWeight(role, item.ItemStat[i].ItemStatType) * static_cast<float>(item.ItemStat[i].ItemStatValue);
+
+        hasAnyPositiveStat = true;
+        uint32 stat = item.ItemStat[i].ItemStatType;
+        if (IsRewardIdentityStat(role, stat))
+            hasIdentityStat = true;
+
+        score += GetRewardStatWeight(role, stat) * static_cast<float>(value);
+        score += GetRewardWrongDirectionPenalty(role, stat, value);
+    }
+
+    // 0.6.2: secondary stats may improve a good item, but cannot define the
+    // item's role by themselves. This prevents crit-only/stamina-only pieces
+    // from outranking true caster, melee, healer, or tank gear simply because
+    // one supporting stat happens to be desirable. Weapons with no explicit
+    // stats still rely on their strong spec-specific weapon preference.
+    if (role != RewardRole::Generic)
+    {
+        if (hasIdentityStat)
+            score += 24.0f;
+        else if (hasAnyPositiveStat)
+            score -= 28.0f;
+        else if (item.Class != ITEM_CLASS_WEAPON)
+            score -= 18.0f;
     }
 
     return score;

@@ -187,3 +187,8 @@ Hunts now refuse to transition into the final-located state without a valid auth
 ### 0.6.1-dev - spec-aware Hunt rewards
 
 Hunt equipment rewards now use AzerothCore's `Player::CanUseItem()` as a hard eligibility check and then score usable items against the hunter's active talent tree. Armor rewards strongly prefer the class's intended armor material for the current level, weapon rewards account for spec-specific preferences (for example Assassination daggers, Combat one-handers, Enhancement melee weapons, and caster/healer weapons), and item stats are weighted by role. Rewards remain randomized among the strongest matching candidates, so a Hunt does not guarantee an upgrade; it should, however, feel like gear intended for the character rather than merely level-appropriate equipment.
+
+
+### 0.6.2-dev - reward spec identity scoring
+
+Spec-aware Hunt rewards now distinguish **identity stats** from merely useful secondary stats. A secondary stat such as crit, hit, or haste can improve a candidate, but it can no longer make a stat-line that lacks the spec's core identity rank like proper gear. Strength/AP identify strength melee gear; Agility/AP identify agility melee gear; Agility/AP/RAP identify hunter gear; Intellect/Spell Power identify caster gear; Intellect/Spell Power/mp5/Spirit identify healer gear; and Stamina/defensive ratings identify tank gear. Items carrying stats that point strongly in the wrong role direction are also penalized. The selector remains intentionally non-deterministic and does not guarantee an upgrade; the goal is consistently appropriate gear rather than perfect gear every hunt.
