@@ -168,6 +168,7 @@ public:
 private:
     HuntManager() = default;
 
+    void AnalyzeFinalLocationLevels(HuntFinalLocationDefinition& location);
     void LoadRuntimes();
     void SaveRuntime(HuntRuntime const& runtime);
     void DeleteRuntime(uint32 characterGuid);

@@ -531,13 +531,9 @@ void HuntManager::LoadDefinitions()
         } while(result->NextRow());
     }
 
-    // 0.6.4.2: final sites may carry authored level bounds. A zero bound means
-    // derive local difficulty from ordinary creature spawns within 200 yards.
-    // Automatic ranges need a useful sample and must overlap the configured Hunt
-    // zone. Sparse/empty samples inherit the zone range. A sample wholly outside
-    // the zone is flagged and skipped during normal level-aware selection; it is
-    // retained only as an emergency last-resort so an existing Hunt can never be
-    // stranded if every authored site in a zone is suspicious.
+    // 0.6.4.6: use the same single-site analyzer at startup and from the
+    // in-game authoring command. This keeps the rules in one place without
+    // forcing a full definition reload every time a GM drops one point.
     constexpr uint32 MinAutoLevelSamples = 8;
     uint32 autoGood = 0;
     uint32 autoSparse = 0;
@@ -546,75 +542,17 @@ void HuntManager::LoadDefinitions()
 
     for (HuntFinalLocationDefinition& location : _finalLocations)
     {
-        if (location.MinLevel && location.MaxLevel)
+        AnalyzeFinalLocationLevels(location);
+        if (!location.AutoDerivedLevels)
             continue;
-
-        HuntZoneDefinition const* zone = nullptr;
-        for (HuntZoneDefinition const& candidate : _zones)
-            if (candidate.ZoneId == location.ZoneId)
-            {
-                zone = &candidate;
-                break;
-            }
-
-        uint8 fallbackMin = zone ? zone->MinLevel : 1;
-        uint8 fallbackMax = zone ? zone->MaxLevel : 80;
-        location.MinLevel = fallbackMin;
-        location.MaxLevel = fallbackMax;
-        location.AutoDerivedLevels = true;
-
-        QueryResult nearby = WorldDatabase.Query(
-            "SELECT COUNT(*), AVG(ct.`minlevel`), AVG(ct.`maxlevel`) "
-            "FROM `creature` c JOIN `creature_template` ct ON ct.`entry`=c.`id` "
-            "WHERE c.`map`={} AND ct.`npcflag`=0 AND ct.`rank`=0 AND ct.`type`<>8 "
-            "AND ct.`maxlevel`>=5 "
-            "AND ((c.`position_x`-{})*(c.`position_x`-{}) + (c.`position_y`-{})*(c.`position_y`-{})) <= 40000",
-            location.MapId, location.X, location.X, location.Y, location.Y);
-
-        if (!nearby)
-        {
+        if (!location.NearbyMobSamples)
             ++autoEmpty;
-            continue;
-        }
-
-        Field* f = nearby->Fetch();
-        uint32 samples = f[0].Get<uint32>();
-        location.NearbyMobSamples = samples;
-        if (!samples || f[1].IsNull() || f[2].IsNull())
-        {
-            ++autoEmpty;
-            continue;
-        }
-
-        if (samples < MinAutoLevelSamples)
-        {
+        else if (location.NearbyMobSamples < MinAutoLevelSamples)
             ++autoSparse;
-            continue;
-        }
-
-        int32 rawMin = static_cast<int32>(std::lround(f[1].Get<double>())) - 2;
-        int32 rawMax = static_cast<int32>(std::lround(f[2].Get<double>())) + 2;
-
-        if (rawMax < fallbackMin || rawMin > fallbackMax)
-        {
-            location.LevelSelectionEligible = false;
+        else if (!location.LevelSelectionEligible)
             ++autoOutside;
-            continue;
-        }
-
-        int32 effectiveMin = std::max<int32>(rawMin, fallbackMin);
-        int32 effectiveMax = std::min<int32>(rawMax, fallbackMax);
-        if (effectiveMin > effectiveMax)
-        {
-            // Defensive guard: never permit an inverted runtime range.
-            location.LevelSelectionEligible = false;
-            ++autoOutside;
-            continue;
-        }
-
-        location.MinLevel = static_cast<uint8>(effectiveMin);
-        location.MaxLevel = static_cast<uint8>(effectiveMax);
-        ++autoGood;
+        else
+            ++autoGood;
     }
 
     LOG_INFO("module", "[LW Hunt] Auto-level final sites: {} good, {} sparse, {} no-mob, {} outside-zone.",
@@ -1233,6 +1171,61 @@ uint32 HuntManager::ResolvePreyEntry(HuntDefinition const& hunt) const
     return hunt.PreyCreatureEntry;
 }
 
+void HuntManager::AnalyzeFinalLocationLevels(HuntFinalLocationDefinition& location)
+{
+    constexpr uint32 MinAutoLevelSamples = 8;
+
+    // Authored non-zero bounds are an explicit override.
+    if (location.MinLevel && location.MaxLevel && !location.AutoDerivedLevels)
+        return;
+
+    HuntZoneDefinition const* zone = GetZone(location.ZoneId);
+    uint8 const fallbackMin = zone ? zone->MinLevel : 1;
+    uint8 const fallbackMax = zone ? zone->MaxLevel : 80;
+
+    location.MinLevel = fallbackMin;
+    location.MaxLevel = fallbackMax;
+    location.NearbyMobSamples = 0;
+    location.AutoDerivedLevels = true;
+    location.LevelSelectionEligible = true;
+
+    QueryResult nearby = WorldDatabase.Query(
+        "SELECT COUNT(*), AVG(ct.`minlevel`), AVG(ct.`maxlevel`) "
+        "FROM `creature` c JOIN `creature_template` ct ON ct.`entry`=c.`id` "
+        "WHERE c.`map`={} AND ct.`npcflag`=0 AND ct.`rank`=0 AND ct.`type`<>8 "
+        "AND ct.`maxlevel`>=5 "
+        "AND ((c.`position_x`-{})*(c.`position_x`-{}) + (c.`position_y`-{})*(c.`position_y`-{})) <= 40000",
+        location.MapId, location.X, location.X, location.Y, location.Y);
+
+    if (!nearby)
+        return;
+
+    Field* f = nearby->Fetch();
+    uint32 const samples = f[0].Get<uint32>();
+    location.NearbyMobSamples = samples;
+    if (!samples || f[1].IsNull() || f[2].IsNull() || samples < MinAutoLevelSamples)
+        return;
+
+    int32 const rawMin = static_cast<int32>(std::lround(f[1].Get<double>())) - 2;
+    int32 const rawMax = static_cast<int32>(std::lround(f[2].Get<double>())) + 2;
+    if (rawMax < fallbackMin || rawMin > fallbackMax)
+    {
+        location.LevelSelectionEligible = false;
+        return;
+    }
+
+    int32 const effectiveMin = std::max<int32>(rawMin, fallbackMin);
+    int32 const effectiveMax = std::min<int32>(rawMax, fallbackMax);
+    if (effectiveMin > effectiveMax)
+    {
+        location.LevelSelectionEligible = false;
+        return;
+    }
+
+    location.MinLevel = static_cast<uint8>(effectiveMin);
+    location.MaxLevel = static_cast<uint8>(effectiveMax);
+}
+
 HuntFinalLocationDefinition const* HuntManager::GetFinalLocation(uint32 finalLocationId) const
 {
     for (auto const& location : _finalLocations)
@@ -1269,9 +1262,22 @@ bool HuntManager::AddFinalLocationAtPlayer(Player* player, std::string& message)
               << ",'',0,0,100,1,'Added in-game with .lw hunt set final point')";
     WorldDatabase.DirectExecute(insertSql.str().c_str());
 
-    // Reload immediately so the new point participates in the 0.6.4 level-aware
-    // analysis and Hunt selection without requiring a worldserver restart.
-    LoadDefinitions();
+    // Analyze and register only the newly-created point. A full LoadDefinitions()
+    // would re-run the nearby-mob query for every final location in the world.
+    HuntFinalLocationDefinition createdLocation;
+    createdLocation.Id = nextId;
+    createdLocation.ZoneId = zoneId;
+    createdLocation.MapId = mapId;
+    createdLocation.X = player->GetPositionX();
+    createdLocation.Y = player->GetPositionY();
+    createdLocation.Z = player->GetPositionZ();
+    createdLocation.Orientation = player->GetOrientation();
+    createdLocation.MinLevel = 0;
+    createdLocation.MaxLevel = 0;
+    createdLocation.Weight = 100;
+    createdLocation.Enabled = true;
+    AnalyzeFinalLocationLevels(createdLocation);
+    _finalLocations.push_back(createdLocation);
 
     std::string zoneName = "Unknown zone";
     if (AreaTableEntry const* zone = sAreaTableStore.LookupEntry(zoneId))
@@ -1583,7 +1589,10 @@ bool HuntManager::DeleteFinalLocation(uint32 locationId, std::string& message)
 
     std::string const deleteSql = "DELETE FROM `lw_hunt_final_location` WHERE `id`=" + std::to_string(locationId);
     WorldDatabase.DirectExecute(deleteSql.c_str());
-    LoadDefinitions();
+    _finalLocations.erase(
+        std::remove_if(_finalLocations.begin(), _finalLocations.end(),
+            [locationId](HuntFinalLocationDefinition const& location) { return location.Id == locationId; }),
+        _finalLocations.end());
 
     uint32 remaining = 0;
     if (QueryResult countResult = WorldDatabase.Query(
