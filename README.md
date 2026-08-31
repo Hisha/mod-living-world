@@ -1,4 +1,16 @@
-## 0.6.4.4-dev Hunt final-location needs report
+## 0.6.4.5-dev Hunt final-location needs command alias
+
+### 0.6.4.5 command compatibility
+
+The Hunt final-location diagnosis can be invoked with either form:
+
+```text
+.lw hunt set final needs [zone]
+.lw hunt set needs [zone]
+```
+
+Both forms call the same diagnostic. The shorter alias is retained intentionally for admin convenience and compatibility with command-parser behavior encountered during in-game testing.
+
 
 Hunt final-location authoring now includes an in-game diagnosis command:
 
@@ -78,7 +90,7 @@ Living World (LW) is an AzerothCore module for SQL-authored dynamic world activi
 - Hunt prey kills remain exempt from the ordinary tracking eligibility check.
 - Adds the non-grey/XP-eligibility tracking rule; prey content is maintained in `910_beast_prey.sql`.
 
-**Current development version:** `0.6.4.4-dev`
+**Current development version:** `0.6.4.5-dev`
 
 
 ## Repository layout

@@ -1161,7 +1161,12 @@ public:
 
         static ChatCommandTable huntSetCommandTable =
         {
-            { "final", huntSetFinalCommandTable }
+            { "final", huntSetFinalCommandTable },
+            // Convenience alias: keep `needs` directly under `set` as well as
+            // under the final-location authoring subtree. This avoids command
+            // parser/version differences from making the diagnostic awkward
+            // to reach, while preserving the documented full path.
+            { "needs", HandleHuntSetFinalNeedsCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No }
         };
 
         static ChatCommandTable huntCommandTable =
@@ -1576,7 +1581,7 @@ private:
         }
 
         handler->SendSysMessage("Living World");
-        handler->SendSysMessage("Version: 0.6.4.4-dev");
+        handler->SendSysMessage("Version: 0.6.4.5-dev");
         handler->PSendSysMessage("Scheduler: {}", schedulerState);
         handler->PSendSysMessage("Debug: {}", livingWorldConfig.GetConfigValue<bool>(LwConfig::Debug) ? "enabled" : "disabled");
         handler->PSendSysMessage("Active runtimes: {}", sInvasionRuntimeMgr.GetActiveRuntimeCount());
