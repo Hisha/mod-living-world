@@ -1151,8 +1151,21 @@ public:
             }
         };
 
+        static ChatCommandTable huntSetFinalCommandTable =
+        {
+            { "point", HandleHuntSetFinalPointCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No },
+            { "list", HandleHuntSetFinalListCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No },
+            { "delete", HandleHuntSetFinalDeleteCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No }
+        };
+
+        static ChatCommandTable huntSetCommandTable =
+        {
+            { "final", huntSetFinalCommandTable }
+        };
+
         static ChatCommandTable huntCommandTable =
         {
+            { "set", huntSetCommandTable },
             { "status", HandleHuntStatusCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No },
             { "progress", HandleHuntProgressCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No },
             { "ambush", HandleHuntAmbushCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No },
@@ -1266,6 +1279,61 @@ public:
     }
 
 private:
+    static bool CanUseHuntAuthoringCommand(ChatHandler* handler, Player*& player)
+    {
+        player = GetCommandPlayer(handler);
+        if (!player)
+            return false;
+
+        if (!player->IsGameMaster())
+        {
+            handler->SendSysMessage("[LW Hunt] Hunt world-authoring commands are restricted to Game Masters.");
+            return false;
+        }
+
+        if (!sHuntMgr.IsDebugEnabled())
+        {
+            handler->SendSysMessage("[LW Hunt] Hunt world-authoring commands require LivingWorld.Debug = 1.");
+            return false;
+        }
+
+        return true;
+    }
+
+    static bool HandleHuntSetFinalPointCommand(ChatHandler* handler)
+    {
+        Player* player = nullptr;
+        if (!CanUseHuntAuthoringCommand(handler, player))
+            return true;
+
+        std::string message;
+        sHuntMgr.AddFinalLocationAtPlayer(player, message);
+        handler->SendSysMessage(message);
+        return true;
+    }
+
+    static bool HandleHuntSetFinalListCommand(ChatHandler* handler)
+    {
+        Player* player = nullptr;
+        if (!CanUseHuntAuthoringCommand(handler, player))
+            return true;
+
+        handler->SendSysMessage(sHuntMgr.BuildFinalLocationList(player));
+        return true;
+    }
+
+    static bool HandleHuntSetFinalDeleteCommand(ChatHandler* handler, uint32 locationId)
+    {
+        Player* player = nullptr;
+        if (!CanUseHuntAuthoringCommand(handler, player))
+            return true;
+
+        std::string message;
+        sHuntMgr.DeleteFinalLocation(locationId, message);
+        handler->SendSysMessage(message);
+        return true;
+    }
+
     static bool HandleHuntStatusCommand(ChatHandler* handler)
     {
         Player* player = GetCommandPlayer(handler);
@@ -1497,7 +1565,7 @@ private:
         }
 
         handler->SendSysMessage("Living World");
-        handler->SendSysMessage("Version: 0.6.4.2-dev");
+        handler->SendSysMessage("Version: 0.6.4.3-dev");
         handler->PSendSysMessage("Scheduler: {}", schedulerState);
         handler->PSendSysMessage("Debug: {}", livingWorldConfig.GetConfigValue<bool>(LwConfig::Debug) ? "enabled" : "disabled");
         handler->PSendSysMessage("Active runtimes: {}", sInvasionRuntimeMgr.GetActiveRuntimeCount());

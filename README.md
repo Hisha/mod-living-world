@@ -1,3 +1,13 @@
+## 0.6.4.3-dev Hunt final-location authoring restored
+
+Restores the GM/debug authoring command tree originally added in commit `f211c04` and lost during later Hunt refactoring.
+
+- `.lw hunt set final point` stores the GM's current map, zone, XYZ and orientation in `lw_hunt_final_location`. New points use `min_level=0` / `max_level=0`, so the 0.6.4 level-aware loader derives their local difficulty automatically.
+- `.lw hunt set final list` lists enabled final sites in the GM's current zone, including effective level range and auto-analysis status (`GOOD`, `SPARSE`, `NO_MOBS`, or `OUTSIDE_ZONE`).
+- `.lw hunt set final delete <id>` removes a final site and reloads Hunt definitions immediately.
+- Authoring commands require GM mode and `LivingWorld.Debug = 1`.
+- Add/delete operations reload the live Hunt definition pool; no worldserver restart is required after using the commands.
+
 ## 0.6.0-dev Hunt rewards
 
 Hunt turn-ins now award level-scaled XP, gold, and a class-usable existing Blizzard equipment item. Reward quality diminishes with repeated same-day hunts, and prey definitions have a data-driven `reward_multiplier`. No client patch is required.
@@ -55,7 +65,7 @@ Living World (LW) is an AzerothCore module for SQL-authored dynamic world activi
 - Hunt prey kills remain exempt from the ordinary tracking eligibility check.
 - Adds the non-grey/XP-eligibility tracking rule; prey content is maintained in `910_beast_prey.sql`.
 
-**Current development version:** `0.6.3-dev`
+**Current development version:** `0.6.4.3-dev`
 
 
 ## Repository layout

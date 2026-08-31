@@ -1241,6 +1241,177 @@ HuntFinalLocationDefinition const* HuntManager::GetFinalLocation(uint32 finalLoc
     return nullptr;
 }
 
+bool HuntManager::AddFinalLocationAtPlayer(Player* player, std::string& message)
+{
+    if (!player)
+    {
+        message = "[LW Hunt] This command must be used in game.";
+        return false;
+    }
+
+    uint32 const zoneId = player->GetZoneId();
+    uint16 const mapId = player->GetMapId();
+    if (!zoneId)
+    {
+        message = "[LW Hunt] Cannot create a final location here because the current zone could not be resolved.";
+        return false;
+    }
+
+    uint32 nextId = 1;
+    if (QueryResult result = WorldDatabase.Query("SELECT COALESCE(MAX(`id`),0)+1 FROM `lw_hunt_final_location`"))
+        nextId = result->Fetch()[0].Get<uint32>();
+
+    std::ostringstream insertSql;
+    insertSql << "INSERT INTO `lw_hunt_final_location` "
+                 "(`id`,`zone_id`,`map_id`,`x`,`y`,`z`,`orientation`,`location_name`,`min_level`,`max_level`,`weight`,`enabled`,`comment`) VALUES ("
+              << nextId << ',' << zoneId << ',' << mapId << ','
+              << player->GetPositionX() << ',' << player->GetPositionY() << ',' << player->GetPositionZ() << ',' << player->GetOrientation()
+              << ",'',0,0,100,1,'Added in-game with .lw hunt set final point')";
+    WorldDatabase.DirectExecute(insertSql.str().c_str());
+
+    // Reload immediately so the new point participates in the 0.6.4 level-aware
+    // analysis and Hunt selection without requiring a worldserver restart.
+    LoadDefinitions();
+
+    std::string zoneName = "Unknown zone";
+    if (AreaTableEntry const* zone = sAreaTableStore.LookupEntry(zoneId))
+    {
+        std::string const localized = zone->area_name[player->GetSession()->GetSessionDbcLocale()];
+        if (!localized.empty())
+            zoneName = localized;
+    }
+
+    std::string areaName;
+    if (Map* map = player->GetMap())
+    {
+        uint32 const areaId = map->GetAreaId(player->GetPhaseMask(), player->GetPositionX(), player->GetPositionY(), player->GetPositionZ());
+        if (AreaTableEntry const* area = sAreaTableStore.LookupEntry(areaId))
+            areaName = area->area_name[player->GetSession()->GetSessionDbcLocale()];
+    }
+
+    bool const configuredZone = GetZone(zoneId) != nullptr;
+    HuntFinalLocationDefinition const* created = GetFinalLocation(nextId);
+
+    std::ostringstream out;
+    out << "[LW Hunt] Final hunt location created. ID: " << nextId
+        << " | Zone: " << zoneName << " (" << zoneId << ")"
+        << " | Map: " << mapId
+        << " | XYZ: " << player->GetPositionX() << ", " << player->GetPositionY() << ", " << player->GetPositionZ()
+        << " | O: " << player->GetOrientation();
+    if (!areaName.empty())
+        out << " | Area: " << areaName;
+    if (created)
+    {
+        out << " | Levels: " << static_cast<uint32>(created->MinLevel) << '-' << static_cast<uint32>(created->MaxLevel);
+        if (created->AutoDerivedLevels)
+        {
+            out << " auto (" << created->NearbyMobSamples << " nearby mobs";
+            if (!created->LevelSelectionEligible)
+                out << ", OUTSIDE_ZONE";
+            out << ')';
+        }
+    }
+    if (!configuredZone)
+        out << " | WARNING: this zone is not currently defined/enabled in lw_hunt_zone, so the point will not enter Hunt rotation yet.";
+
+    message = out.str();
+    return true;
+}
+
+std::string HuntManager::BuildFinalLocationList(Player const* player) const
+{
+    if (!player)
+        return "[LW Hunt] This command must be used in game.";
+
+    uint32 const zoneId = player->GetZoneId();
+    std::string zoneName = "Unknown zone";
+    if (AreaTableEntry const* zone = sAreaTableStore.LookupEntry(zoneId))
+    {
+        std::string const localized = zone->area_name[player->GetSession()->GetSessionDbcLocale()];
+        if (!localized.empty())
+            zoneName = localized;
+    }
+
+    std::ostringstream out;
+    out << "[LW Hunt] Final locations for " << zoneName << " (zone " << zoneId << "):";
+    uint32 count = 0;
+    for (HuntFinalLocationDefinition const& location : _finalLocations)
+    {
+        if (location.ZoneId != zoneId || !location.Enabled)
+            continue;
+
+        out << "\n " << location.Id << " - "
+            << location.X << ", " << location.Y << ", " << location.Z
+            << " (map " << location.MapId << ")"
+            << " | levels " << static_cast<uint32>(location.MinLevel) << '-' << static_cast<uint32>(location.MaxLevel);
+
+        if (location.AutoDerivedLevels)
+        {
+            if (!location.NearbyMobSamples)
+                out << " | auto NO_MOBS";
+            else if (location.NearbyMobSamples < 8)
+                out << " | auto SPARSE (" << location.NearbyMobSamples << " mobs)";
+            else if (!location.LevelSelectionEligible)
+                out << " | auto OUTSIDE_ZONE (" << location.NearbyMobSamples << " mobs)";
+            else
+                out << " | auto GOOD (" << location.NearbyMobSamples << " mobs)";
+        }
+        else
+            out << " | authored";
+
+        ++count;
+    }
+
+    if (!count)
+        out << "\n No enabled final locations are currently defined for this zone.";
+    else
+        out << "\n[LW Hunt] " << count << " enabled final location(s).";
+
+    return out.str();
+}
+
+bool HuntManager::DeleteFinalLocation(uint32 locationId, std::string& message)
+{
+    QueryResult result = WorldDatabase.Query(
+        "SELECT `zone_id`,`map_id`,`x`,`y`,`z` FROM `lw_hunt_final_location` WHERE `id`={}", locationId);
+    if (!result)
+    {
+        message = "[LW Hunt] Final location " + std::to_string(locationId) + " does not exist.";
+        return false;
+    }
+
+    Field* fields = result->Fetch();
+    uint32 const zoneId = fields[0].Get<uint32>();
+    uint16 const mapId = fields[1].Get<uint16>();
+    float const x = fields[2].Get<float>();
+    float const y = fields[3].Get<float>();
+    float const z = fields[4].Get<float>();
+
+    std::string const deleteSql = "DELETE FROM `lw_hunt_final_location` WHERE `id`=" + std::to_string(locationId);
+    WorldDatabase.DirectExecute(deleteSql.c_str());
+    LoadDefinitions();
+
+    uint32 remaining = 0;
+    if (QueryResult countResult = WorldDatabase.Query(
+        "SELECT COUNT(*) FROM `lw_hunt_final_location` WHERE `zone_id`={} AND `enabled`=1", zoneId))
+        remaining = countResult->Fetch()[0].Get<uint32>();
+
+    std::string zoneName = "zone " + std::to_string(zoneId);
+    if (HuntZoneDefinition const* zone = GetZone(zoneId))
+        zoneName = zone->Name;
+
+    std::ostringstream out;
+    out << "[LW Hunt] Final location " << locationId << " deleted from " << zoneName
+        << " (map " << mapId << ", " << x << ", " << y << ", " << z << ").";
+    if (!remaining)
+        out << " WARNING: This was the last enabled final location for the zone. The zone will no longer be eligible for hunts.";
+    else
+        out << ' ' << remaining << " enabled final location(s) remain in the zone.";
+
+    message = out.str();
+    return true;
+}
+
 std::string HuntManager::ResolveFinalLocationName(Player* player, HuntFinalLocationDefinition const& location) const
 {
     // Explicit authored names remain supported for special locations. Most Hunt
