@@ -202,3 +202,7 @@ Spec-aware Hunt rewards now distinguish **identity stats** from merely useful se
 
 ### 0.6.4.1-dev hotfix
 Updated the local-creature lookup for AzerothCore's current `creature.id` schema (renamed from legacy `id1` in June 2026). This fixes startup aborts in level-aware Hunt location loading and the coverage report.
+
+
+### 0.6.4.2-dev - Hunt location range validation
+Automatic final-location level detection now requires at least 8 qualifying nearby ordinary creature spawns before trusting a local band. Empty or sparse samples inherit the parent Hunt-zone range. Samples whose padded local band falls wholly outside the configured Hunt-zone range are marked suspicious and excluded from normal level-aware final-site selection; they remain available only as an emergency last-resort if every enabled site in a zone is suspicious, so existing hunts cannot be stranded. Runtime ranges are defensively prevented from inverting. The coverage report now labels every site `GOOD`, `SPARSE`, `OUTSIDE_ZONE`, or `NO_MOBS` and shows raw and effective bands.

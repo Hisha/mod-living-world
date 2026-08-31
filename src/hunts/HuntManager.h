@@ -88,6 +88,7 @@ struct HuntFinalLocationDefinition
     uint8 MaxLevel = 0;
     uint32 NearbyMobSamples = 0;
     bool AutoDerivedLevels = false;
+    bool LevelSelectionEligible = true;
     uint32 Weight = 100;
     bool Enabled = false;
 };

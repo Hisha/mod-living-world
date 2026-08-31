@@ -531,9 +531,19 @@ void HuntManager::LoadDefinitions()
         } while(result->NextRow());
     }
 
-    // 0.6.4: final sites may carry authored level bounds.  A zero bound means
-    // derive the local difficulty from ordinary creature spawns near the site.
-    // This keeps new Hunt locations data-light while still allowing manual overrides.
+    // 0.6.4.2: final sites may carry authored level bounds. A zero bound means
+    // derive local difficulty from ordinary creature spawns within 200 yards.
+    // Automatic ranges need a useful sample and must overlap the configured Hunt
+    // zone. Sparse/empty samples inherit the zone range. A sample wholly outside
+    // the zone is flagged and skipped during normal level-aware selection; it is
+    // retained only as an emergency last-resort so an existing Hunt can never be
+    // stranded if every authored site in a zone is suspicious.
+    constexpr uint32 MinAutoLevelSamples = 8;
+    uint32 autoGood = 0;
+    uint32 autoSparse = 0;
+    uint32 autoEmpty = 0;
+    uint32 autoOutside = 0;
+
     for (HuntFinalLocationDefinition& location : _finalLocations)
     {
         if (location.MinLevel && location.MaxLevel)
@@ -549,6 +559,9 @@ void HuntManager::LoadDefinitions()
 
         uint8 fallbackMin = zone ? zone->MinLevel : 1;
         uint8 fallbackMax = zone ? zone->MaxLevel : 80;
+        location.MinLevel = fallbackMin;
+        location.MaxLevel = fallbackMax;
+        location.AutoDerivedLevels = true;
 
         QueryResult nearby = WorldDatabase.Query(
             "SELECT COUNT(*), AVG(ct.`minlevel`), AVG(ct.`maxlevel`) "
@@ -558,26 +571,54 @@ void HuntManager::LoadDefinitions()
             "AND ((c.`position_x`-{})*(c.`position_x`-{}) + (c.`position_y`-{})*(c.`position_y`-{})) <= 40000",
             location.MapId, location.X, location.X, location.Y, location.Y);
 
-        if (nearby)
+        if (!nearby)
         {
-            Field* f = nearby->Fetch();
-            uint32 samples = f[0].Get<uint32>();
-            location.NearbyMobSamples = samples;
-            if (samples >= 3 && !f[1].IsNull() && !f[2].IsNull())
-            {
-                int32 localMin = static_cast<int32>(std::lround(f[1].Get<double>())) - 2;
-                int32 localMax = static_cast<int32>(std::lround(f[2].Get<double>())) + 2;
-                location.MinLevel = static_cast<uint8>(std::clamp<int32>(localMin, fallbackMin, fallbackMax));
-                location.MaxLevel = static_cast<uint8>(std::clamp<int32>(localMax, location.MinLevel, fallbackMax));
-                location.AutoDerivedLevels = true;
-                continue;
-            }
+            ++autoEmpty;
+            continue;
         }
 
-        location.MinLevel = fallbackMin;
-        location.MaxLevel = fallbackMax;
-        location.AutoDerivedLevels = true;
+        Field* f = nearby->Fetch();
+        uint32 samples = f[0].Get<uint32>();
+        location.NearbyMobSamples = samples;
+        if (!samples || f[1].IsNull() || f[2].IsNull())
+        {
+            ++autoEmpty;
+            continue;
+        }
+
+        if (samples < MinAutoLevelSamples)
+        {
+            ++autoSparse;
+            continue;
+        }
+
+        int32 rawMin = static_cast<int32>(std::lround(f[1].Get<double>())) - 2;
+        int32 rawMax = static_cast<int32>(std::lround(f[2].Get<double>())) + 2;
+
+        if (rawMax < fallbackMin || rawMin > fallbackMax)
+        {
+            location.LevelSelectionEligible = false;
+            ++autoOutside;
+            continue;
+        }
+
+        int32 effectiveMin = std::max<int32>(rawMin, fallbackMin);
+        int32 effectiveMax = std::min<int32>(rawMax, fallbackMax);
+        if (effectiveMin > effectiveMax)
+        {
+            // Defensive guard: never permit an inverted runtime range.
+            location.LevelSelectionEligible = false;
+            ++autoOutside;
+            continue;
+        }
+
+        location.MinLevel = static_cast<uint8>(effectiveMin);
+        location.MaxLevel = static_cast<uint8>(effectiveMax);
+        ++autoGood;
     }
+
+    LOG_INFO("module", "[LW Hunt] Auto-level final sites: {} good, {} sparse, {} no-mob, {} outside-zone.",
+        autoGood, autoSparse, autoEmpty, autoOutside);
 
     if (QueryResult result = WorldDatabase.Query(
         "SELECT `id`,`creature_entry`,`city_name`,`map_id`,`continent_id`,`x`,`y`,`z`,`enabled` FROM `lw_hunt_giver` WHERE `enabled`=1"))
@@ -722,7 +763,7 @@ HuntFinalLocationDefinition const* HuntManager::SelectFinalLocation(HuntRuntime 
     std::vector<HuntFinalLocationDefinition const*> eligible;
     uint32 totalWeight = 0;
     for(auto const& l:_finalLocations)
-        if(l.ZoneId==runtime.ZoneId && l.Enabled && hunterLevel >= l.MinLevel && hunterLevel <= l.MaxLevel)
+        if(l.ZoneId==runtime.ZoneId && l.Enabled && l.LevelSelectionEligible && hunterLevel >= l.MinLevel && hunterLevel <= l.MaxLevel)
         {
             eligible.push_back(&l);
             totalWeight += std::max<uint32>(1, l.Weight);
@@ -735,7 +776,7 @@ HuntFinalLocationDefinition const* HuntManager::SelectFinalLocation(HuntRuntime 
         uint32 bestDistance = std::numeric_limits<uint32>::max();
         for (auto const& l : _finalLocations)
         {
-            if (l.ZoneId != runtime.ZoneId || !l.Enabled)
+            if (l.ZoneId != runtime.ZoneId || !l.Enabled || !l.LevelSelectionEligible)
                 continue;
             uint32 distance = hunterLevel < l.MinLevel ? l.MinLevel - hunterLevel :
                 (hunterLevel > l.MaxLevel ? hunterLevel - l.MaxLevel : 0);
@@ -750,6 +791,20 @@ HuntFinalLocationDefinition const* HuntManager::SelectFinalLocation(HuntRuntime 
             }
         }
     }
+
+    // If every site in the zone was rejected as suspicious, preserve the older
+    // never-strand behavior and choose from all enabled sites as a last resort.
+    if (eligible.empty())
+    {
+        for (auto const& l : _finalLocations)
+        {
+            if (l.ZoneId != runtime.ZoneId || !l.Enabled)
+                continue;
+            eligible.push_back(&l);
+            totalWeight += std::max<uint32>(1, l.Weight);
+        }
+    }
+
     if(eligible.empty()) return nullptr;
     uint32 roll=urand(1,totalWeight);
     for(auto const* l:eligible)
