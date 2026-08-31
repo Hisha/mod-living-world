@@ -552,7 +552,7 @@ void HuntManager::LoadDefinitions()
 
         QueryResult nearby = WorldDatabase.Query(
             "SELECT COUNT(*), AVG(ct.`minlevel`), AVG(ct.`maxlevel`) "
-            "FROM `creature` c JOIN `creature_template` ct ON ct.`entry`=c.`id1` "
+            "FROM `creature` c JOIN `creature_template` ct ON ct.`entry`=c.`id` "
             "WHERE c.`map`={} AND ct.`npcflag`=0 AND ct.`rank`=0 AND ct.`type`<>8 "
             "AND ct.`maxlevel`>=5 "
             "AND ((c.`position_x`-{})*(c.`position_x`-{}) + (c.`position_y`-{})*(c.`position_y`-{})) <= 40000",
