@@ -1,4 +1,4 @@
-## 0.6.4.6-dev Hunt final-location needs command alias
+## 0.6.4.7-dev Hunt final-location needs command alias
 
 ### 0.6.4.5 command compatibility
 
@@ -90,7 +90,7 @@ Living World (LW) is an AzerothCore module for SQL-authored dynamic world activi
 - Hunt prey kills remain exempt from the ordinary tracking eligibility check.
 - Adds the non-grey/XP-eligibility tracking rule; prey content is maintained in `910_beast_prey.sql`.
 
-**Current development version:** `0.6.4.6-dev`
+**Current development version:** `0.6.4.7-dev`
 
 
 ## Repository layout
@@ -242,7 +242,11 @@ Updated the local-creature lookup for AzerothCore's current `creature.id` schema
 ### 0.6.4.2-dev - Hunt location range validation
 Automatic final-location level detection now requires at least 8 qualifying nearby ordinary creature spawns before trusting a local band. Empty or sparse samples inherit the parent Hunt-zone range. Samples whose padded local band falls wholly outside the configured Hunt-zone range are marked suspicious and excluded from normal level-aware final-site selection; they remain available only as an emergency last-resort if every enabled site in a zone is suspicious, so existing hunts cannot be stranded. Runtime ranges are defensively prevented from inverting. The coverage report now labels every site `GOOD`, `SPARSE`, `OUTSIDE_ZONE`, or `NO_MOBS` and shows raw and effective bands.
 
-### 0.6.4.6-dev
+### 0.6.4.7-dev
 - Optimized Hunt final-location authoring: `.lw hunt set final point` now analyzes only the newly-created point instead of reloading and re-analyzing every Hunt definition/final site.
 - `.lw hunt set final delete <id>` now removes the point directly from the live in-memory location pool instead of triggering a full definition reload.
 - Startup and live authoring share the same final-location level-analysis helper, keeping GOOD/SPARSE/NO_MOBS/OUTSIDE_ZONE behavior consistent.
+
+
+### 0.6.4.7-dev Hunt authoring to-do output
+`.lw hunt set needs` / `.lw hunt set final needs` now prioritizes actual missing level coverage as `TODO NEEDS LEVELS`, labels `OUTSIDE_ZONE` as `WARN`, and labels `SPARSE`/`NO_MOBS` as informational. World-wide output shows coverage work first, followed by review-only zones.

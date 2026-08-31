@@ -1404,24 +1404,52 @@ std::string HuntManager::BuildFinalLocationNeeds(std::string const& zoneFilter) 
         return lowerCopy(zone.Name).find(filter) != std::string::npos;
     };
 
-    auto appendIdList = [](std::ostringstream& out, char const* label, std::vector<uint32> const& ids)
+    auto formatIdList = [](char const* label, std::vector<uint32> const& ids)
     {
+        std::ostringstream out;
         if (ids.empty())
-            return;
+            return out.str();
 
-        out << " | " << label << ' ';
+        out << label << ' ';
         for (size_t i = 0; i < ids.size(); ++i)
         {
             if (i)
                 out << ',';
             out << '#' << ids[i];
         }
+        return out.str();
+    };
+
+    auto formatRanges = [](std::vector<std::pair<uint8, uint8>> const& ranges)
+    {
+        std::ostringstream out;
+        for (size_t i = 0; i < ranges.size(); ++i)
+        {
+            if (i)
+                out << ',';
+            uint32 const first = ranges[i].first;
+            uint32 const last = ranges[i].second;
+            out << first;
+            if (last != first)
+                out << '-' << last;
+        }
+        return out.str();
+    };
+
+    struct ZoneNeed
+    {
+        HuntZoneDefinition const* Zone = nullptr;
+        uint32 EnabledLocationCount = 0;
+        std::vector<uint32> NoMobIds;
+        std::vector<uint32> SparseIds;
+        std::vector<uint32> OutsideIds;
+        std::vector<std::pair<uint8, uint8>> UncoveredRanges;
     };
 
     uint32 matchingZones = 0;
-    uint32 needsAttention = 0;
     uint32 cleanZones = 0;
-    std::ostringstream details;
+    std::vector<ZoneNeed> coverageNeeds;
+    std::vector<ZoneNeed> reviewOnly;
 
     for (HuntZoneDefinition const& zone : _zones)
     {
@@ -1429,18 +1457,16 @@ std::string HuntManager::BuildFinalLocationNeeds(std::string const& zoneFilter) 
             continue;
 
         ++matchingZones;
-        std::vector<uint32> noMobIds;
-        std::vector<uint32> sparseIds;
-        std::vector<uint32> outsideIds;
+        ZoneNeed need;
+        need.Zone = &zone;
         std::vector<HuntFinalLocationDefinition const*> trustedLocations;
-        uint32 enabledLocationCount = 0;
 
         for (HuntFinalLocationDefinition const& location : _finalLocations)
         {
             if (!location.Enabled || location.ZoneId != zone.ZoneId)
                 continue;
 
-            ++enabledLocationCount;
+            ++need.EnabledLocationCount;
 
             if (!location.AutoDerivedLevels)
             {
@@ -1450,29 +1476,27 @@ std::string HuntManager::BuildFinalLocationNeeds(std::string const& zoneFilter) 
 
             if (!location.NearbyMobSamples)
             {
-                noMobIds.push_back(location.Id);
+                need.NoMobIds.push_back(location.Id);
                 continue;
             }
 
             if (location.NearbyMobSamples < MinAutoLevelSamples)
             {
-                sparseIds.push_back(location.Id);
+                need.SparseIds.push_back(location.Id);
                 continue;
             }
 
             if (!location.LevelSelectionEligible)
             {
-                outsideIds.push_back(location.Id);
+                need.OutsideIds.push_back(location.Id);
                 continue;
             }
 
             trustedLocations.push_back(&location);
         }
 
-        std::vector<std::pair<uint8, uint8>> uncoveredRanges;
         bool inGap = false;
         uint8 gapStart = 0;
-
         for (uint16 level = zone.MinLevel; level <= zone.MaxLevel; ++level)
         {
             bool covered = false;
@@ -1496,50 +1520,27 @@ std::string HuntManager::BuildFinalLocationNeeds(std::string const& zoneFilter) 
             }
             else if (covered && inGap)
             {
-                uncoveredRanges.emplace_back(gapStart, static_cast<uint8>(level - 1));
+                need.UncoveredRanges.emplace_back(gapStart, static_cast<uint8>(level - 1));
                 inGap = false;
             }
         }
 
         if (inGap)
-            uncoveredRanges.emplace_back(gapStart, zone.MaxLevel);
+            need.UncoveredRanges.emplace_back(gapStart, zone.MaxLevel);
 
-        bool const needs = enabledLocationCount == 0 || !noMobIds.empty() || !sparseIds.empty() ||
-            !outsideIds.empty() || !uncoveredRanges.empty();
+        bool const hasCoverageWork = !need.EnabledLocationCount || !need.UncoveredRanges.empty();
+        bool const hasReview = !need.NoMobIds.empty() || !need.SparseIds.empty() || !need.OutsideIds.empty();
 
-        if (!needs)
+        if (!hasCoverageWork && !hasReview)
         {
             ++cleanZones;
-            if (hasFilter)
-                details << "\n" << zone.Name << " (" << static_cast<uint32>(zone.MinLevel) << '-'
-                        << static_cast<uint32>(zone.MaxLevel) << "): GOOD - no authoring issues detected.";
             continue;
         }
 
-        ++needsAttention;
-        details << "\n" << zone.Name << " (" << static_cast<uint32>(zone.MinLevel) << '-'
-                << static_cast<uint32>(zone.MaxLevel) << "):";
-
-        if (!enabledLocationCount)
-            details << " | NO_LOCATIONS";
-        appendIdList(details, "NO_MOBS", noMobIds);
-        appendIdList(details, "SPARSE", sparseIds);
-        appendIdList(details, "OUTSIDE_ZONE", outsideIds);
-
-        if (!uncoveredRanges.empty())
-        {
-            details << " | COVERAGE ";
-            for (size_t i = 0; i < uncoveredRanges.size(); ++i)
-            {
-                if (i)
-                    details << ',';
-                uint32 const first = uncoveredRanges[i].first;
-                uint32 const last = uncoveredRanges[i].second;
-                details << first;
-                if (last != first)
-                    details << '-' << last;
-            }
-        }
+        if (hasCoverageWork)
+            coverageNeeds.push_back(std::move(need));
+        else
+            reviewOnly.push_back(std::move(need));
     }
 
     std::ostringstream out;
@@ -1550,23 +1551,58 @@ std::string HuntManager::BuildFinalLocationNeeds(std::string const& zoneFilter) 
         return out.str();
     }
 
-    if (hasFilter)
-        out << "[LW Hunt] Final-location authoring diagnosis for '" << zoneFilter << "':";
-    else
-        out << "[LW Hunt] Final-location areas needing attention:";
+    auto appendZone = [&](ZoneNeed const& need)
+    {
+        HuntZoneDefinition const& zone = *need.Zone;
+        out << "\n" << zone.Name << " (" << static_cast<uint32>(zone.MinLevel) << '-'
+            << static_cast<uint32>(zone.MaxLevel) << "):";
 
-    out << details.str();
+        if (!need.EnabledLocationCount)
+            out << " | TODO NO FINAL LOCATIONS";
+        else if (!need.UncoveredRanges.empty())
+            out << " | TODO NEEDS LEVELS " << formatRanges(need.UncoveredRanges);
+
+        if (!need.OutsideIds.empty())
+            out << " | WARN " << formatIdList("OUTSIDE_ZONE", need.OutsideIds);
+
+        if (!need.SparseIds.empty())
+            out << " | INFO " << formatIdList("SPARSE", need.SparseIds);
+
+        if (!need.NoMobIds.empty())
+            out << " | INFO " << formatIdList("NO_MOBS", need.NoMobIds);
+    };
+
+    if (hasFilter)
+        out << "[LW Hunt] Final-location authoring to-do for '" << zoneFilter << "':";
+    else
+        out << "[LW Hunt] Final-location authoring TO-DO list:";
+
+    if (!coverageNeeds.empty())
+    {
+        out << "\n[LW Hunt] PRIORITY - add final sites for missing level coverage:";
+        for (ZoneNeed const& need : coverageNeeds)
+            appendZone(need);
+    }
+
+    if (!reviewOnly.empty())
+    {
+        out << "\n[LW Hunt] REVIEW - coverage is complete; inspect warnings/info when convenient:";
+        for (ZoneNeed const& need : reviewOnly)
+            appendZone(need);
+    }
+
+    if (coverageNeeds.empty() && reviewOnly.empty())
+        out << "\n[LW Hunt] No authoring work detected.";
 
     if (!hasFilter)
     {
-        if (!needsAttention)
-            out << "\n[LW Hunt] All " << cleanZones << " enabled Hunt zones passed the authoring checks.";
-        else
-            out << "\n[LW Hunt] " << needsAttention << " zone(s) need attention; " << cleanZones << " zone(s) are clean.";
+        out << "\n[LW Hunt] " << coverageNeeds.size() << " zone(s) need coverage work; "
+            << reviewOnly.size() << " zone(s) only need review; " << cleanZones << " zone(s) are clean.";
     }
 
-    out << "\n[LW Hunt] COVERAGE allows +/-" << static_cast<uint32>(CoverageToleranceLevels)
-        << " level around trusted final-site bands; NO_MOBS/SPARSE/OUTSIDE_ZONE sites do not satisfy coverage.";
+    out << "\n[LW Hunt] TODO = missing playable coverage; WARN = possible difficulty mismatch; "
+        << "INFO = auto-level confidence only. Coverage allows +/-"
+        << static_cast<uint32>(CoverageToleranceLevels) << " level around trusted final-site bands.";
     return out.str();
 }
 
