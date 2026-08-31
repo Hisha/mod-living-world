@@ -1155,6 +1155,7 @@ public:
         {
             { "point", HandleHuntSetFinalPointCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No },
             { "list", HandleHuntSetFinalListCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No },
+            { "needs", HandleHuntSetFinalNeedsCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No },
             { "delete", HandleHuntSetFinalDeleteCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No }
         };
 
@@ -1319,6 +1320,16 @@ private:
             return true;
 
         handler->SendSysMessage(sHuntMgr.BuildFinalLocationList(player));
+        return true;
+    }
+
+    static bool HandleHuntSetFinalNeedsCommand(ChatHandler* handler, Optional<std::string> zoneFilter)
+    {
+        Player* player = nullptr;
+        if (!CanUseHuntAuthoringCommand(handler, player))
+            return true;
+
+        handler->SendSysMessage(sHuntMgr.BuildFinalLocationNeeds(zoneFilter.value_or("")));
         return true;
     }
 
@@ -1565,7 +1576,7 @@ private:
         }
 
         handler->SendSysMessage("Living World");
-        handler->SendSysMessage("Version: 0.6.4.3-dev");
+        handler->SendSysMessage("Version: 0.6.4.4-dev");
         handler->PSendSysMessage("Scheduler: {}", schedulerState);
         handler->PSendSysMessage("Debug: {}", livingWorldConfig.GetConfigValue<bool>(LwConfig::Debug) ? "enabled" : "disabled");
         handler->PSendSysMessage("Active runtimes: {}", sInvasionRuntimeMgr.GetActiveRuntimeCount());

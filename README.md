@@ -1,3 +1,16 @@
+## 0.6.4.4-dev Hunt final-location needs report
+
+Hunt final-location authoring now includes an in-game diagnosis command:
+
+- `.lw hunt set final needs` lists only enabled Hunt zones that need authoring attention.
+- `.lw hunt set final needs <zone name|zone id>` limits the diagnosis to a matching zone. Partial zone names are accepted.
+- The report identifies `NO_MOBS`, `SPARSE`, and `OUTSIDE_ZONE` auto-derived sites by location ID.
+- It also reports uncovered level bands (`COVERAGE`) using only trusted sites. A one-level tolerance around each trusted site's effective band prevents harmless edge differences from creating noisy warnings.
+- `NO_MOBS`, `SPARSE`, and `OUTSIDE_ZONE` sites remain available to the runtime's existing fallback behavior, but they do not count as trusted coverage for this authoring report.
+- The command requires GM mode and `LivingWorld.Debug = 1`, matching the other `.lw hunt set final ...` authoring commands.
+
+No database migration is required from 0.6.4.3-dev.
+
 ## 0.6.4.3-dev Hunt final-location authoring restored
 
 Restores the GM/debug authoring command tree originally added in commit `f211c04` and lost during later Hunt refactoring.
@@ -65,7 +78,7 @@ Living World (LW) is an AzerothCore module for SQL-authored dynamic world activi
 - Hunt prey kills remain exempt from the ordinary tracking eligibility check.
 - Adds the non-grey/XP-eligibility tracking rule; prey content is maintained in `910_beast_prey.sql`.
 
-**Current development version:** `0.6.4.3-dev`
+**Current development version:** `0.6.4.4-dev`
 
 
 ## Repository layout

@@ -1370,6 +1370,200 @@ std::string HuntManager::BuildFinalLocationList(Player const* player) const
     return out.str();
 }
 
+std::string HuntManager::BuildFinalLocationNeeds(std::string const& zoneFilter) const
+{
+    constexpr uint32 MinAutoLevelSamples = 8;
+    constexpr uint8 CoverageToleranceLevels = 1;
+
+    auto lowerCopy = [](std::string value)
+    {
+        std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c)
+        {
+            return static_cast<char>(std::tolower(c));
+        });
+        return value;
+    };
+
+    std::string const filter = lowerCopy(zoneFilter);
+    bool const hasFilter = !filter.empty();
+
+    auto zoneMatches = [&](HuntZoneDefinition const& zone)
+    {
+        if (!hasFilter)
+            return true;
+
+        if (filter == std::to_string(zone.ZoneId))
+            return true;
+
+        return lowerCopy(zone.Name).find(filter) != std::string::npos;
+    };
+
+    auto appendIdList = [](std::ostringstream& out, char const* label, std::vector<uint32> const& ids)
+    {
+        if (ids.empty())
+            return;
+
+        out << " | " << label << ' ';
+        for (size_t i = 0; i < ids.size(); ++i)
+        {
+            if (i)
+                out << ',';
+            out << '#' << ids[i];
+        }
+    };
+
+    uint32 matchingZones = 0;
+    uint32 needsAttention = 0;
+    uint32 cleanZones = 0;
+    std::ostringstream details;
+
+    for (HuntZoneDefinition const& zone : _zones)
+    {
+        if (!zone.Enabled || !zoneMatches(zone))
+            continue;
+
+        ++matchingZones;
+        std::vector<uint32> noMobIds;
+        std::vector<uint32> sparseIds;
+        std::vector<uint32> outsideIds;
+        std::vector<HuntFinalLocationDefinition const*> trustedLocations;
+        uint32 enabledLocationCount = 0;
+
+        for (HuntFinalLocationDefinition const& location : _finalLocations)
+        {
+            if (!location.Enabled || location.ZoneId != zone.ZoneId)
+                continue;
+
+            ++enabledLocationCount;
+
+            if (!location.AutoDerivedLevels)
+            {
+                trustedLocations.push_back(&location);
+                continue;
+            }
+
+            if (!location.NearbyMobSamples)
+            {
+                noMobIds.push_back(location.Id);
+                continue;
+            }
+
+            if (location.NearbyMobSamples < MinAutoLevelSamples)
+            {
+                sparseIds.push_back(location.Id);
+                continue;
+            }
+
+            if (!location.LevelSelectionEligible)
+            {
+                outsideIds.push_back(location.Id);
+                continue;
+            }
+
+            trustedLocations.push_back(&location);
+        }
+
+        std::vector<std::pair<uint8, uint8>> uncoveredRanges;
+        bool inGap = false;
+        uint8 gapStart = 0;
+
+        for (uint16 level = zone.MinLevel; level <= zone.MaxLevel; ++level)
+        {
+            bool covered = false;
+            for (HuntFinalLocationDefinition const* location : trustedLocations)
+            {
+                uint16 const minLevel = location->MinLevel > CoverageToleranceLevels
+                    ? static_cast<uint16>(location->MinLevel - CoverageToleranceLevels)
+                    : 1;
+                uint16 const maxLevel = std::min<uint16>(80, static_cast<uint16>(location->MaxLevel) + CoverageToleranceLevels);
+                if (level >= minLevel && level <= maxLevel)
+                {
+                    covered = true;
+                    break;
+                }
+            }
+
+            if (!covered && !inGap)
+            {
+                inGap = true;
+                gapStart = static_cast<uint8>(level);
+            }
+            else if (covered && inGap)
+            {
+                uncoveredRanges.emplace_back(gapStart, static_cast<uint8>(level - 1));
+                inGap = false;
+            }
+        }
+
+        if (inGap)
+            uncoveredRanges.emplace_back(gapStart, zone.MaxLevel);
+
+        bool const needs = enabledLocationCount == 0 || !noMobIds.empty() || !sparseIds.empty() ||
+            !outsideIds.empty() || !uncoveredRanges.empty();
+
+        if (!needs)
+        {
+            ++cleanZones;
+            if (hasFilter)
+                details << "\n" << zone.Name << " (" << static_cast<uint32>(zone.MinLevel) << '-'
+                        << static_cast<uint32>(zone.MaxLevel) << "): GOOD - no authoring issues detected.";
+            continue;
+        }
+
+        ++needsAttention;
+        details << "\n" << zone.Name << " (" << static_cast<uint32>(zone.MinLevel) << '-'
+                << static_cast<uint32>(zone.MaxLevel) << "):";
+
+        if (!enabledLocationCount)
+            details << " | NO_LOCATIONS";
+        appendIdList(details, "NO_MOBS", noMobIds);
+        appendIdList(details, "SPARSE", sparseIds);
+        appendIdList(details, "OUTSIDE_ZONE", outsideIds);
+
+        if (!uncoveredRanges.empty())
+        {
+            details << " | COVERAGE ";
+            for (size_t i = 0; i < uncoveredRanges.size(); ++i)
+            {
+                if (i)
+                    details << ',';
+                uint32 const first = uncoveredRanges[i].first;
+                uint32 const last = uncoveredRanges[i].second;
+                details << first;
+                if (last != first)
+                    details << '-' << last;
+            }
+        }
+    }
+
+    std::ostringstream out;
+    if (hasFilter && !matchingZones)
+    {
+        out << "[LW Hunt] No enabled Hunt zone matched '" << zoneFilter
+            << "'. Use the zone name (or part of it) or the numeric zone ID.";
+        return out.str();
+    }
+
+    if (hasFilter)
+        out << "[LW Hunt] Final-location authoring diagnosis for '" << zoneFilter << "':";
+    else
+        out << "[LW Hunt] Final-location areas needing attention:";
+
+    out << details.str();
+
+    if (!hasFilter)
+    {
+        if (!needsAttention)
+            out << "\n[LW Hunt] All " << cleanZones << " enabled Hunt zones passed the authoring checks.";
+        else
+            out << "\n[LW Hunt] " << needsAttention << " zone(s) need attention; " << cleanZones << " zone(s) are clean.";
+    }
+
+    out << "\n[LW Hunt] COVERAGE allows +/-" << static_cast<uint32>(CoverageToleranceLevels)
+        << " level around trusted final-site bands; NO_MOBS/SPARSE/OUTSIDE_ZONE sites do not satisfy coverage.";
+    return out.str();
+}
+
 bool HuntManager::DeleteFinalLocation(uint32 locationId, std::string& message)
 {
     QueryResult result = WorldDatabase.Query(

@@ -158,6 +158,7 @@ public:
     // GM/debug world-authoring helpers for final hunt crystal locations.
     bool AddFinalLocationAtPlayer(Player* player, std::string& message);
     std::string BuildFinalLocationList(Player const* player) const;
+    std::string BuildFinalLocationNeeds(std::string const& zoneFilter = "") const;
     bool DeleteFinalLocation(uint32 locationId, std::string& message);
 
     bool IsHuntGiver(uint32 creatureEntry) const;
