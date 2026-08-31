@@ -521,14 +521,62 @@ void HuntManager::LoadDefinitions()
     }
 
     if (QueryResult result = WorldDatabase.Query(
-        "SELECT `id`,`zone_id`,`map_id`,`x`,`y`,`z`,`orientation`,`location_name`,`weight`,`enabled` FROM `lw_hunt_final_location` WHERE `enabled`=1"))
+        "SELECT `id`,`zone_id`,`map_id`,`x`,`y`,`z`,`orientation`,`location_name`,`min_level`,`max_level`,`weight`,`enabled` FROM `lw_hunt_final_location` WHERE `enabled`=1"))
     {
         do
         {
             Field* f=result->Fetch(); HuntFinalLocationDefinition d;
-            d.Id=f[0].Get<uint32>(); d.ZoneId=f[1].Get<uint32>(); d.MapId=f[2].Get<uint16>(); d.X=f[3].Get<float>(); d.Y=f[4].Get<float>(); d.Z=f[5].Get<float>(); d.Orientation=f[6].Get<float>(); d.LocationName=f[7].Get<std::string>(); d.Weight=f[8].Get<uint32>(); d.Enabled=f[9].Get<uint8>()!=0;
+            d.Id=f[0].Get<uint32>(); d.ZoneId=f[1].Get<uint32>(); d.MapId=f[2].Get<uint16>(); d.X=f[3].Get<float>(); d.Y=f[4].Get<float>(); d.Z=f[5].Get<float>(); d.Orientation=f[6].Get<float>(); d.LocationName=f[7].Get<std::string>(); d.MinLevel=f[8].Get<uint8>(); d.MaxLevel=f[9].Get<uint8>(); d.Weight=f[10].Get<uint32>(); d.Enabled=f[11].Get<uint8>()!=0;
             _finalLocations.push_back(d);
         } while(result->NextRow());
+    }
+
+    // 0.6.4: final sites may carry authored level bounds.  A zero bound means
+    // derive the local difficulty from ordinary creature spawns near the site.
+    // This keeps new Hunt locations data-light while still allowing manual overrides.
+    for (HuntFinalLocationDefinition& location : _finalLocations)
+    {
+        if (location.MinLevel && location.MaxLevel)
+            continue;
+
+        HuntZoneDefinition const* zone = nullptr;
+        for (HuntZoneDefinition const& candidate : _zones)
+            if (candidate.ZoneId == location.ZoneId)
+            {
+                zone = &candidate;
+                break;
+            }
+
+        uint8 fallbackMin = zone ? zone->MinLevel : 1;
+        uint8 fallbackMax = zone ? zone->MaxLevel : 80;
+
+        QueryResult nearby = WorldDatabase.Query(
+            "SELECT COUNT(*), AVG(ct.`minlevel`), AVG(ct.`maxlevel`) "
+            "FROM `creature` c JOIN `creature_template` ct ON ct.`entry`=c.`id1` "
+            "WHERE c.`map`={} AND ct.`npcflag`=0 AND ct.`rank`=0 AND ct.`type`<>8 "
+            "AND ct.`maxlevel`>=5 "
+            "AND ((c.`position_x`-{})*(c.`position_x`-{}) + (c.`position_y`-{})*(c.`position_y`-{})) <= 40000",
+            location.MapId, location.X, location.X, location.Y, location.Y);
+
+        if (nearby)
+        {
+            Field* f = nearby->Fetch();
+            uint32 samples = f[0].Get<uint32>();
+            location.NearbyMobSamples = samples;
+            if (samples >= 3 && !f[1].IsNull() && !f[2].IsNull())
+            {
+                int32 localMin = static_cast<int32>(std::lround(f[1].Get<double>())) - 2;
+                int32 localMax = static_cast<int32>(std::lround(f[2].Get<double>())) + 2;
+                location.MinLevel = static_cast<uint8>(std::clamp<int32>(localMin, fallbackMin, fallbackMax));
+                location.MaxLevel = static_cast<uint8>(std::clamp<int32>(localMax, location.MinLevel, fallbackMax));
+                location.AutoDerivedLevels = true;
+                continue;
+            }
+        }
+
+        location.MinLevel = fallbackMin;
+        location.MaxLevel = fallbackMax;
+        location.AutoDerivedLevels = true;
     }
 
     if (QueryResult result = WorldDatabase.Query(
@@ -669,16 +717,39 @@ HuntZoneDefinition const* HuntManager::SelectZone(uint8 level, HuntGiverDefiniti
     return eligible.back();
 }
 
-HuntFinalLocationDefinition const* HuntManager::SelectFinalLocation(HuntRuntime const& runtime) const
+HuntFinalLocationDefinition const* HuntManager::SelectFinalLocation(HuntRuntime const& runtime, uint8 hunterLevel) const
 {
     std::vector<HuntFinalLocationDefinition const*> eligible;
     uint32 totalWeight = 0;
     for(auto const& l:_finalLocations)
-        if(l.ZoneId==runtime.ZoneId && l.Enabled)
+        if(l.ZoneId==runtime.ZoneId && l.Enabled && hunterLevel >= l.MinLevel && hunterLevel <= l.MaxLevel)
         {
             eligible.push_back(&l);
             totalWeight += std::max<uint32>(1, l.Weight);
         }
+
+    // Never strand an existing hunt because authored/derived coverage has a gap.
+    // Prefer the closest level band in the assigned zone as a graceful fallback.
+    if (eligible.empty())
+    {
+        uint32 bestDistance = std::numeric_limits<uint32>::max();
+        for (auto const& l : _finalLocations)
+        {
+            if (l.ZoneId != runtime.ZoneId || !l.Enabled)
+                continue;
+            uint32 distance = hunterLevel < l.MinLevel ? l.MinLevel - hunterLevel :
+                (hunterLevel > l.MaxLevel ? hunterLevel - l.MaxLevel : 0);
+            if (distance < bestDistance)
+            {
+                eligible.clear(); totalWeight = 0; bestDistance = distance;
+            }
+            if (distance == bestDistance)
+            {
+                eligible.push_back(&l);
+                totalWeight += std::max<uint32>(1, l.Weight);
+            }
+        }
+    }
     if(eligible.empty()) return nullptr;
     uint32 roll=urand(1,totalWeight);
     for(auto const* l:eligible)
@@ -1434,7 +1505,7 @@ bool HuntManager::SendFinalLocationPoi(Player* player, HuntRuntime const& r) con
 
 bool HuntManager::LocateFinal(Player* player, HuntRuntime& r)
 {
-    HuntFinalLocationDefinition const* location = SelectFinalLocation(r);
+    HuntFinalLocationDefinition const* location = SelectFinalLocation(r, player ? player->GetLevel() : 1);
     if (!location)
     {
         LOG_ERROR("server.loading", "[LW Hunt] Character {} reached final tracking for prey {} in zone {}, but no enabled final location is available.",

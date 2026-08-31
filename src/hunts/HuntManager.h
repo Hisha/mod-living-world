@@ -84,6 +84,10 @@ struct HuntFinalLocationDefinition
     float Z = 0.0f;
     float Orientation = 0.0f;
     std::string LocationName;
+    uint8 MinLevel = 0;
+    uint8 MaxLevel = 0;
+    uint32 NearbyMobSamples = 0;
+    bool AutoDerivedLevels = false;
     uint32 Weight = 100;
     bool Enabled = false;
 };
@@ -167,7 +171,7 @@ private:
     void DeleteRuntime(uint32 characterGuid);
     HuntZoneDefinition const* SelectZone(uint8 playerLevel, HuntGiverDefinition const& giver) const;
     HuntZoneDefinition const* GetZone(uint32 zoneId) const;
-    HuntFinalLocationDefinition const* SelectFinalLocation(HuntRuntime const& runtime) const;
+    HuntFinalLocationDefinition const* SelectFinalLocation(HuntRuntime const& runtime, uint8 hunterLevel) const;
     bool SpawnPrey(Player* player, HuntRuntime& runtime, bool finalEncounter, std::string& message);
     uint32 ResolvePreyEntry(HuntDefinition const& hunt) const;
     HuntFinalLocationDefinition const* GetFinalLocation(uint32 finalLocationId) const;

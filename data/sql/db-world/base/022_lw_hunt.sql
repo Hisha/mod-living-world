@@ -67,11 +67,14 @@ CREATE TABLE IF NOT EXISTS `lw_hunt_final_location` (
   `z` FLOAT NOT NULL,
   `orientation` FLOAT NOT NULL DEFAULT 0,
   `location_name` VARCHAR(120) NOT NULL DEFAULT '',
+  `min_level` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=auto-derive from nearby world creatures',
+  `max_level` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=auto-derive from nearby world creatures',
   `weight` INT UNSIGNED NOT NULL DEFAULT 100,
   `enabled` TINYINT UNSIGNED NOT NULL DEFAULT 1,
   `comment` VARCHAR(255) NULL,
   PRIMARY KEY (`id`),
-  KEY `idx_lw_hunt_final` (`zone_id`,`enabled`)
+  KEY `idx_lw_hunt_final` (`zone_id`,`enabled`),
+  KEY `idx_lw_hunt_final_level` (`zone_id`,`min_level`,`max_level`,`enabled`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `lw_hunt_giver` (
