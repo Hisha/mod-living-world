@@ -168,6 +168,7 @@ public:
 private:
     HuntManager() = default;
 
+    void ApplyFinalLocationLevelAnalysis(HuntFinalLocationDefinition& location, uint32 samples, double avgMinLevel, double avgMaxLevel);
     void AnalyzeFinalLocationLevels(HuntFinalLocationDefinition& location);
     void LoadRuntimes();
     void SaveRuntime(HuntRuntime const& runtime);

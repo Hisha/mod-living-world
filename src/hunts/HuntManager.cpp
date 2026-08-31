@@ -25,6 +25,7 @@
 #include <cmath>
 #include <limits>
 #include <sstream>
+#include <unordered_map>
 
 
 namespace
@@ -531,9 +532,43 @@ void HuntManager::LoadDefinitions()
         } while(result->NextRow());
     }
 
-    // 0.6.4.6: use the same single-site analyzer at startup and from the
-    // in-game authoring command. This keeps the rules in one place without
-    // forcing a full definition reload every time a GM drops one point.
+    // 0.6.4.8: startup analyzes every auto-derived final site from one bulk
+    // creature-spawn read instead of issuing one spatial SQL query per site.
+    // The in-game authoring command still analyzes only its newly added point.
+    struct NearbyMobLevelSample
+    {
+        uint16 MapId = 0;
+        float X = 0.0f;
+        float Y = 0.0f;
+        uint8 MinLevel = 1;
+        uint8 MaxLevel = 1;
+    };
+
+    std::unordered_map<uint16, std::vector<NearbyMobLevelSample>> mobSamplesByMap;
+    uint32 loadedMobSamples = 0;
+
+    if (QueryResult result = WorldDatabase.Query(
+        "SELECT c.`map`,c.`position_x`,c.`position_y`,ct.`minlevel`,ct.`maxlevel` "
+        "FROM `creature` c JOIN `creature_template` ct ON ct.`entry`=c.`id` "
+        "WHERE ct.`npcflag`=0 AND ct.`rank`=0 AND ct.`type`<>8 AND ct.`maxlevel`>=5"))
+    {
+        do
+        {
+            Field* f = result->Fetch();
+            NearbyMobLevelSample sample;
+            sample.MapId = f[0].Get<uint16>();
+            sample.X = f[1].Get<float>();
+            sample.Y = f[2].Get<float>();
+            sample.MinLevel = f[3].Get<uint8>();
+            sample.MaxLevel = f[4].Get<uint8>();
+            mobSamplesByMap[sample.MapId].push_back(sample);
+            ++loadedMobSamples;
+        } while (result->NextRow());
+    }
+
+    LOG_INFO("server.loading", "[LW Hunt] Bulk-loaded {} ordinary creature spawn sample(s) for final-site auto-level analysis.",
+        loadedMobSamples);
+
     constexpr uint32 MinAutoLevelSamples = 8;
     uint32 autoGood = 0;
     uint32 autoSparse = 0;
@@ -542,9 +577,33 @@ void HuntManager::LoadDefinitions()
 
     for (HuntFinalLocationDefinition& location : _finalLocations)
     {
-        AnalyzeFinalLocationLevels(location);
-        if (!location.AutoDerivedLevels)
+        if (location.MinLevel && location.MaxLevel && !location.AutoDerivedLevels)
             continue;
+
+        uint32 samples = 0;
+        double minLevelSum = 0.0;
+        double maxLevelSum = 0.0;
+
+        auto const mapItr = mobSamplesByMap.find(location.MapId);
+        if (mapItr != mobSamplesByMap.end())
+        {
+            for (NearbyMobLevelSample const& mob : mapItr->second)
+            {
+                float const dx = mob.X - location.X;
+                float const dy = mob.Y - location.Y;
+                if ((dx * dx + dy * dy) > 40000.0f)
+                    continue;
+
+                ++samples;
+                minLevelSum += mob.MinLevel;
+                maxLevelSum += mob.MaxLevel;
+            }
+        }
+
+        double const avgMin = samples ? (minLevelSum / samples) : 0.0;
+        double const avgMax = samples ? (maxLevelSum / samples) : 0.0;
+        ApplyFinalLocationLevelAnalysis(location, samples, avgMin, avgMax);
+
         if (!location.NearbyMobSamples)
             ++autoEmpty;
         else if (location.NearbyMobSamples < MinAutoLevelSamples)
@@ -555,7 +614,7 @@ void HuntManager::LoadDefinitions()
             ++autoGood;
     }
 
-    LOG_INFO("module", "[LW Hunt] Auto-level final sites: {} good, {} sparse, {} no-mob, {} outside-zone.",
+    LOG_INFO("server.loading", "[LW Hunt] Auto-level final sites: {} good, {} sparse, {} no-mob, {} outside-zone.",
         autoGood, autoSparse, autoEmpty, autoOutside);
 
     if (QueryResult result = WorldDatabase.Query(
@@ -1171,13 +1230,10 @@ uint32 HuntManager::ResolvePreyEntry(HuntDefinition const& hunt) const
     return hunt.PreyCreatureEntry;
 }
 
-void HuntManager::AnalyzeFinalLocationLevels(HuntFinalLocationDefinition& location)
+void HuntManager::ApplyFinalLocationLevelAnalysis(
+    HuntFinalLocationDefinition& location, uint32 samples, double avgMinLevel, double avgMaxLevel)
 {
     constexpr uint32 MinAutoLevelSamples = 8;
-
-    // Authored non-zero bounds are an explicit override.
-    if (location.MinLevel && location.MaxLevel && !location.AutoDerivedLevels)
-        return;
 
     HuntZoneDefinition const* zone = GetZone(location.ZoneId);
     uint8 const fallbackMin = zone ? zone->MinLevel : 1;
@@ -1185,29 +1241,15 @@ void HuntManager::AnalyzeFinalLocationLevels(HuntFinalLocationDefinition& locati
 
     location.MinLevel = fallbackMin;
     location.MaxLevel = fallbackMax;
-    location.NearbyMobSamples = 0;
+    location.NearbyMobSamples = samples;
     location.AutoDerivedLevels = true;
     location.LevelSelectionEligible = true;
 
-    QueryResult nearby = WorldDatabase.Query(
-        "SELECT COUNT(*), AVG(ct.`minlevel`), AVG(ct.`maxlevel`) "
-        "FROM `creature` c JOIN `creature_template` ct ON ct.`entry`=c.`id` "
-        "WHERE c.`map`={} AND ct.`npcflag`=0 AND ct.`rank`=0 AND ct.`type`<>8 "
-        "AND ct.`maxlevel`>=5 "
-        "AND ((c.`position_x`-{})*(c.`position_x`-{}) + (c.`position_y`-{})*(c.`position_y`-{})) <= 40000",
-        location.MapId, location.X, location.X, location.Y, location.Y);
-
-    if (!nearby)
+    if (!samples || samples < MinAutoLevelSamples)
         return;
 
-    Field* f = nearby->Fetch();
-    uint32 const samples = f[0].Get<uint32>();
-    location.NearbyMobSamples = samples;
-    if (!samples || f[1].IsNull() || f[2].IsNull() || samples < MinAutoLevelSamples)
-        return;
-
-    int32 const rawMin = static_cast<int32>(std::lround(f[1].Get<double>())) - 2;
-    int32 const rawMax = static_cast<int32>(std::lround(f[2].Get<double>())) + 2;
+    int32 const rawMin = static_cast<int32>(std::lround(avgMinLevel)) - 2;
+    int32 const rawMax = static_cast<int32>(std::lround(avgMaxLevel)) + 2;
     if (rawMax < fallbackMin || rawMin > fallbackMax)
     {
         location.LevelSelectionEligible = false;
@@ -1224,6 +1266,33 @@ void HuntManager::AnalyzeFinalLocationLevels(HuntFinalLocationDefinition& locati
 
     location.MinLevel = static_cast<uint8>(effectiveMin);
     location.MaxLevel = static_cast<uint8>(effectiveMax);
+}
+
+void HuntManager::AnalyzeFinalLocationLevels(HuntFinalLocationDefinition& location)
+{
+    // Authored non-zero bounds are an explicit override.
+    if (location.MinLevel && location.MaxLevel && !location.AutoDerivedLevels)
+        return;
+
+    QueryResult nearby = WorldDatabase.Query(
+        "SELECT COUNT(*), AVG(ct.`minlevel`), AVG(ct.`maxlevel`) "
+        "FROM `creature` c JOIN `creature_template` ct ON ct.`entry`=c.`id` "
+        "WHERE c.`map`={} AND ct.`npcflag`=0 AND ct.`rank`=0 AND ct.`type`<>8 "
+        "AND ct.`maxlevel`>=5 "
+        "AND ((c.`position_x`-{})*(c.`position_x`-{}) + (c.`position_y`-{})*(c.`position_y`-{})) <= 40000",
+        location.MapId, location.X, location.X, location.Y, location.Y);
+
+    if (!nearby)
+    {
+        ApplyFinalLocationLevelAnalysis(location, 0, 0.0, 0.0);
+        return;
+    }
+
+    Field* f = nearby->Fetch();
+    uint32 const samples = f[0].Get<uint32>();
+    double const avgMin = (!samples || f[1].IsNull()) ? 0.0 : f[1].Get<double>();
+    double const avgMax = (!samples || f[2].IsNull()) ? 0.0 : f[2].Get<double>();
+    ApplyFinalLocationLevelAnalysis(location, samples, avgMin, avgMax);
 }
 
 HuntFinalLocationDefinition const* HuntManager::GetFinalLocation(uint32 finalLocationId) const
