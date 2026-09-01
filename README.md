@@ -1,4 +1,4 @@
-## 0.6.4.8-dev Hunt final-location needs command alias
+## 0.6.4.9-dev Hunt final-location needs command alias
 
 ### 0.6.4.5 command compatibility
 
@@ -90,7 +90,7 @@ Living World (LW) is an AzerothCore module for SQL-authored dynamic world activi
 - Hunt prey kills remain exempt from the ordinary tracking eligibility check.
 - Adds the non-grey/XP-eligibility tracking rule; prey content is maintained in `910_beast_prey.sql`.
 
-**Current development version:** `0.6.4.8-dev`
+**Current development version:** `0.6.4.9-dev`
 
 
 ## Repository layout
@@ -242,14 +242,17 @@ Updated the local-creature lookup for AzerothCore's current `creature.id` schema
 ### 0.6.4.2-dev - Hunt location range validation
 Automatic final-location level detection now requires at least 8 qualifying nearby ordinary creature spawns before trusting a local band. Empty or sparse samples inherit the parent Hunt-zone range. Samples whose padded local band falls wholly outside the configured Hunt-zone range are marked suspicious and excluded from normal level-aware final-site selection; they remain available only as an emergency last-resort if every enabled site in a zone is suspicious, so existing hunts cannot be stranded. Runtime ranges are defensively prevented from inverting. The coverage report now labels every site `GOOD`, `SPARSE`, `OUTSIDE_ZONE`, or `NO_MOBS` and shows raw and effective bands.
 
-### 0.6.4.8-dev
+### 0.6.4.9-dev
 - Optimized Hunt final-location authoring: `.lw hunt set final point` now analyzes only the newly-created point instead of reloading and re-analyzing every Hunt definition/final site.
 - `.lw hunt set final delete <id>` now removes the point directly from the live in-memory location pool instead of triggering a full definition reload.
 - Startup and live authoring share the same final-location level-analysis helper, keeping GOOD/SPARSE/NO_MOBS/OUTSIDE_ZONE behavior consistent.
 
 
-### 0.6.4.8-dev Hunt authoring to-do output
+### 0.6.4.9-dev Hunt authoring to-do output
 `.lw hunt set needs` / `.lw hunt set final needs` now prioritizes actual missing level coverage as `TODO NEEDS LEVELS`, labels `OUTSIDE_ZONE` as `WARN`, and labels `SPARSE`/`NO_MOBS` as informational. World-wide output shows coverage work first, followed by review-only zones.
 
-### 0.6.4.8-dev Hunt startup auto-level optimization
+### 0.6.4.9-dev Hunt startup auto-level optimization
 Hunt final-site auto-level analysis now bulk-loads qualifying ordinary creature spawn positions/levels once at startup and evaluates every authored final site in memory. This replaces the previous one spatial SQL aggregation per auto-derived final location. Live `.lw hunt set final point` authoring remains incremental and analyzes only the newly added site. Both paths share `ApplyFinalLocationLevelAnalysis()` so GOOD/SPARSE/NO_MOBS/OUTSIDE_ZONE classification rules remain identical.
+
+### 0.6.4.9-dev Living World dynamic-template startup optimization
+LW derived creature templates are now rebuilt with set-based SQL instead of performing cleanup, materialization, model/equipment copy, validation, and mapping updates separately for every logical template. Existing safe allocation remains in place for newly introduced logical templates. The normal already-mapped startup path now uses a handful of bulk database operations plus bulk validation while preserving the same base-template inheritance and LW override behavior.
