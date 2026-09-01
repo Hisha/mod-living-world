@@ -1702,6 +1702,88 @@ std::string HuntManager::BuildFinalLocationNeeds(std::string const& zoneFilter) 
     return out.str();
 }
 
+std::string HuntManager::BuildFinalLocationExport(std::string const& zoneFilter) const
+{
+    uint32 filterZoneId = 0;
+    std::string filter = zoneFilter;
+    if (!filter.empty())
+    {
+        bool numeric = std::all_of(filter.begin(), filter.end(), [](unsigned char c) { return std::isdigit(c) != 0; });
+        if (numeric)
+            filterZoneId = static_cast<uint32>(std::stoul(filter));
+        else
+        {
+            std::string lowered = filter;
+            std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            for (HuntZoneDefinition const& zone : _zones)
+            {
+                std::string zoneName = zone.Name;
+                std::transform(zoneName.begin(), zoneName.end(), zoneName.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                if (zoneName.find(lowered) != std::string::npos)
+                {
+                    filterZoneId = zone.ZoneId;
+                    break;
+                }
+            }
+            if (!filterZoneId)
+                return "[LW Hunt] Export filter did not match a configured Hunt zone: " + filter;
+        }
+    }
+
+    std::ostringstream query;
+    query << "SELECT `id`,`zone_id`,`map_id`,`x`,`y`,`z`,`orientation`,`location_name`,`min_level`,`max_level`,`weight`,`enabled`,`comment` "
+             "FROM `lw_hunt_final_location` WHERE `comment` LIKE 'Added in-game with .lw hunt set final point%'";
+    if (filterZoneId)
+        query << " AND `zone_id`=" << filterZoneId;
+    query << " ORDER BY `id`";
+
+    QueryResult result = WorldDatabase.Query(query.str().c_str());
+    if (!result)
+        return filterZoneId ? "[LW Hunt] No in-game-authored final locations found for that zone."
+                            : "[LW Hunt] No in-game-authored final locations found.";
+
+    auto escapeSql = [](std::string value)
+    {
+        std::string escaped;
+        escaped.reserve(value.size() + 8);
+        for (char c : value)
+        {
+            if (c == '\'')
+                escaped += "''";
+            else if (c == '\\')
+                escaped += "\\\\";
+            else
+                escaped += c;
+        }
+        return escaped;
+    };
+
+    std::ostringstream out;
+    out << "[LW Hunt] SQL export for in-game-authored final locations";
+    if (filterZoneId)
+        out << " in zone " << filterZoneId;
+    out << ":\nREPLACE INTO `lw_hunt_final_location` "
+           "(`id`,`zone_id`,`map_id`,`x`,`y`,`z`,`orientation`,`location_name`,`min_level`,`max_level`,`weight`,`enabled`,`comment`) VALUES\n";
+
+    uint32 count = 0;
+    do
+    {
+        Field* f = result->Fetch();
+        if (count)
+            out << ",\n";
+        out << '(' << f[0].Get<uint32>() << ',' << f[1].Get<uint32>() << ',' << f[2].Get<uint16>() << ','
+            << f[3].Get<float>() << ',' << f[4].Get<float>() << ',' << f[5].Get<float>() << ',' << f[6].Get<float>()
+            << ",'" << escapeSql(f[7].Get<std::string>()) << "',"
+            << static_cast<uint32>(f[8].Get<uint8>()) << ',' << static_cast<uint32>(f[9].Get<uint8>()) << ','
+            << f[10].Get<uint32>() << ',' << static_cast<uint32>(f[11].Get<uint8>()) << ",'"
+            << escapeSql(f[12].Get<std::string>()) << "')";
+        ++count;
+    } while (result->NextRow());
+
+    out << ";\n[LW Hunt] Exported " << count << " in-game-authored final location(s).";
+    return out.str();
+}
+
 bool HuntManager::DeleteFinalLocation(uint32 locationId, std::string& message)
 {
     QueryResult result = WorldDatabase.Query(

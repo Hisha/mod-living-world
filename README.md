@@ -1,4 +1,4 @@
-## 0.6.4.10-dev Hunt final-location needs command alias
+## 0.6.4.11-dev Hunt final-location needs command alias
 
 ### 0.6.4.5 command compatibility
 
@@ -90,7 +90,7 @@ Living World (LW) is an AzerothCore module for SQL-authored dynamic world activi
 - Hunt prey kills remain exempt from the ordinary tracking eligibility check.
 - Adds the non-grey/XP-eligibility tracking rule; prey content is maintained in `910_beast_prey.sql`.
 
-**Current development version:** `0.6.4.10-dev`
+**Current development version:** `0.6.4.11-dev`
 
 
 ## Repository layout
@@ -242,20 +242,23 @@ Updated the local-creature lookup for AzerothCore's current `creature.id` schema
 ### 0.6.4.2-dev - Hunt location range validation
 Automatic final-location level detection now requires at least 8 qualifying nearby ordinary creature spawns before trusting a local band. Empty or sparse samples inherit the parent Hunt-zone range. Samples whose padded local band falls wholly outside the configured Hunt-zone range are marked suspicious and excluded from normal level-aware final-site selection; they remain available only as an emergency last-resort if every enabled site in a zone is suspicious, so existing hunts cannot be stranded. Runtime ranges are defensively prevented from inverting. The coverage report now labels every site `GOOD`, `SPARSE`, `OUTSIDE_ZONE`, or `NO_MOBS` and shows raw and effective bands.
 
-### 0.6.4.10-dev
+### 0.6.4.11-dev
 - Optimized Hunt final-location authoring: `.lw hunt set final point` now analyzes only the newly-created point instead of reloading and re-analyzing every Hunt definition/final site.
 - `.lw hunt set final delete <id>` now removes the point directly from the live in-memory location pool instead of triggering a full definition reload.
 - Startup and live authoring share the same final-location level-analysis helper, keeping GOOD/SPARSE/NO_MOBS/OUTSIDE_ZONE behavior consistent.
 
 
-### 0.6.4.10-dev Hunt authoring to-do output
+### 0.6.4.11-dev Hunt authoring to-do output
 `.lw hunt set needs` / `.lw hunt set final needs` now prioritizes actual missing level coverage as `TODO NEEDS LEVELS`, labels `OUTSIDE_ZONE` as `WARN`, and labels `SPARSE`/`NO_MOBS` as informational. World-wide output shows coverage work first, followed by review-only zones.
 
-### 0.6.4.10-dev Hunt startup auto-level optimization
+### 0.6.4.11-dev Hunt startup auto-level optimization
 Hunt final-site auto-level analysis now bulk-loads qualifying ordinary creature spawn positions/levels once at startup and evaluates every authored final site in memory. This replaces the previous one spatial SQL aggregation per auto-derived final location. Live `.lw hunt set final point` authoring remains incremental and analyzes only the newly added site. Both paths share `ApplyFinalLocationLevelAnalysis()` so GOOD/SPARSE/NO_MOBS/OUTSIDE_ZONE classification rules remain identical.
 
-### 0.6.4.10-dev Living World dynamic-template startup optimization
+### 0.6.4.11-dev Living World dynamic-template startup optimization
 LW derived creature templates are now rebuilt with set-based SQL instead of performing cleanup, materialization, model/equipment copy, validation, and mapping updates separately for every logical template. Existing safe allocation remains in place for newly introduced logical templates. The normal already-mapped startup path now uses a handful of bulk database operations plus bulk validation while preserving the same base-template inheritance and LW override behavior.
 
-### 0.6.4.10-dev Huntmaster city-direction coverage
+### 0.6.4.11-dev Huntmaster city-direction coverage
 Huntmaster directions are no longer limited to one hard-coded guard creature entry per city. `lw_hunt_guard_locator` remains the authoritative seed mapping, and Hunt startup now discovers additional creature entries that use the same stock gossip menu as a registered locator. Magus Fansy Goodbringer (32691) is also explicitly registered for Dalaran so the Huntmaster option is available from the Dalaran information giver used near the Violet Hold.
+
+### 0.6.4.11-dev Hunt final-location repository/export tooling
+Final locations 1180-1194 authored in-game are now preserved in the canonical Eastern Kingdoms and Kalimdor prebuilt SQL. Their level bounds remain 0/0 for automatic local-level analysis. New GM command `.lw hunt set final export [zone]` emits executable REPLACE SQL for rows created with `.lw hunt set final point`; the optional filter accepts a zone id or partial configured Hunt-zone name.
