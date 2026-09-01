@@ -634,6 +634,33 @@ void HuntManager::LoadDefinitions()
         do { Field* f=result->Fetch(); _guardLocators[f[0].Get<uint32>()]=f[1].Get<uint32>(); } while(result->NextRow());
     }
 
+    // 0.6.4.10: a city can have several different information-giver creature
+    // entries that expose the same stock directions menu.  Treat every
+    // creature_template using an explicitly registered locator's gossip menu
+    // as an alias for the same Huntmaster.  This keeps the table as a small set
+    // of authoritative seeds instead of requiring us to enumerate every city
+    // information NPC by hand.
+    uint32 discoveredGuardAliases = 0;
+    if (QueryResult result = WorldDatabase.Query(
+        "SELECT DISTINCT sibling.`entry`, gl.`hunt_giver_id` "
+        "FROM `lw_hunt_guard_locator` gl "
+        "JOIN `creature_template` seed ON seed.`entry`=gl.`guard_creature_entry` "
+        "JOIN `creature_template` sibling ON sibling.`gossip_menu_id`=seed.`gossip_menu_id` "
+        "WHERE gl.`enabled`=1 AND seed.`gossip_menu_id`<>0 AND sibling.`gossip_menu_id`<>0"))
+    {
+        do
+        {
+            Field* f = result->Fetch();
+            uint32 const entry = f[0].Get<uint32>();
+            uint32 const giverId = f[1].Get<uint32>();
+            if (_guardLocators.emplace(entry, giverId).second)
+                ++discoveredGuardAliases;
+        } while (result->NextRow());
+    }
+
+    LOG_INFO("module", "[LW Hunt] Discovered {} additional city-direction NPC alias(es) from registered guard gossip menus.",
+        discoveredGuardAliases);
+
     if (QueryResult result = WorldDatabase.Query("SELECT `hunt_giver_id`,`zone_id` FROM `lw_hunt_local_region_zone` WHERE `enabled`=1"))
     {
         do { Field* f=result->Fetch(); _giverLocalZones[f[0].Get<uint32>()].push_back(f[1].Get<uint32>()); } while(result->NextRow());

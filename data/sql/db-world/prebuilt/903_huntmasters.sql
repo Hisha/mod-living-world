@@ -95,7 +95,7 @@ INSERT INTO `lw_hunt_giver` (`id`,`creature_entry`,`city_name`,`map_id`,`contine
 (9,@SH_ENTRY,'Shattrath City',530,3,-2019.2322,5203.5225,-35.69525,1,'Neutral Outland hub Huntmaster'),
 (10,@DA_ENTRY,'Dalaran',571,4,5773.8013,548.9488,651.6386,1,'Neutral Northrend hub Huntmaster');
 
-DELETE FROM `lw_hunt_guard_locator` WHERE `id` BETWEEN 1 AND 13;
+DELETE FROM `lw_hunt_guard_locator` WHERE `id` BETWEEN 1 AND 14;
 INSERT INTO `lw_hunt_guard_locator` (`id`,`guard_creature_entry`,`hunt_giver_id`,`enabled`,`comment`) VALUES
 (1,68,1,1,'Stormwind City Guard'),
 (2,1976,1,1,'Stormwind City Patroller'),
@@ -109,4 +109,5 @@ INSERT INTO `lw_hunt_guard_locator` (`id`,`guard_creature_entry`,`hunt_giver_id`
 (10,36213,7,1,'Kor''kron Overseer - Wrath-era Undercity'),
 (11,16222,8,1,'Silvermoon City Guardian'),
 (12,19687,9,1,'Shattrath City Peacekeeper'),
-(13,30659,10,1,'Violet Hold Guard - Dalaran');
+(13,30659,10,1,'Violet Hold Guard - Dalaran'),
+(14,32691,10,1,'Magus Fansy Goodbringer - Dalaran information giver');
