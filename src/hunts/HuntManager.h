@@ -160,6 +160,8 @@ public:
     std::string BuildFinalLocationList(Player const* player) const;
     std::string BuildFinalLocationNeeds(std::string const& zoneFilter = "") const;
     std::string BuildFinalLocationExport(std::string const& zoneFilter = "") const;
+    bool SetFinalLocationLevels(uint32 locationId, uint8 minLevel, uint8 maxLevel, bool automatic, std::string& message);
+    bool TeleportToFinalLocation(Player* player, uint32 locationId, std::string& message) const;
     bool DeleteFinalLocation(uint32 locationId, std::string& message);
 
     bool IsHuntGiver(uint32 creatureEntry) const;

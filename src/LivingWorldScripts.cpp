@@ -1157,6 +1157,8 @@ public:
             { "list", HandleHuntSetFinalListCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No },
             { "needs", HandleHuntSetFinalNeedsCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No },
             { "export", HandleHuntSetFinalExportCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No },
+            { "levels", HandleHuntSetFinalLevelsCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No },
+            { "goto", HandleHuntSetFinalGotoCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No },
             { "delete", HandleHuntSetFinalDeleteCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No }
         };
 
@@ -1346,6 +1348,54 @@ private:
             return true;
 
         handler->SendSysMessage(sHuntMgr.BuildFinalLocationExport(zoneFilter.value_or("")));
+        return true;
+    }
+
+    static bool HandleHuntSetFinalLevelsCommand(ChatHandler* handler, uint32 locationId, std::string minOrAuto, Optional<uint32> maxLevel)
+    {
+        Player* player = nullptr;
+        if (!CanUseHuntAuthoringCommand(handler, player))
+            return true;
+
+        std::string message;
+        std::string mode = minOrAuto;
+        std::transform(mode.begin(), mode.end(), mode.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (mode == "auto")
+            sHuntMgr.SetFinalLocationLevels(locationId, 0, 0, true, message);
+        else
+        {
+            uint32 minLevel = 0;
+            try
+            {
+                std::size_t parsed = 0;
+                minLevel = static_cast<uint32>(std::stoul(minOrAuto, &parsed));
+                if (parsed != minOrAuto.size())
+                    minLevel = 0;
+            }
+            catch (...)
+            {
+                minLevel = 0;
+            }
+
+            if (!maxLevel.has_value() || !minLevel || minLevel > 80 || maxLevel.value() > 80)
+                message = "[LW Hunt] Usage: .lw hunt set final levels <id> <min 1-80> <max 1-80> | .lw hunt set final levels <id> auto";
+            else
+                sHuntMgr.SetFinalLocationLevels(locationId, static_cast<uint8>(minLevel), static_cast<uint8>(maxLevel.value()), false, message);
+        }
+
+        handler->SendSysMessage(message);
+        return true;
+    }
+
+    static bool HandleHuntSetFinalGotoCommand(ChatHandler* handler, uint32 locationId)
+    {
+        Player* player = nullptr;
+        if (!CanUseHuntAuthoringCommand(handler, player))
+            return true;
+
+        std::string message;
+        sHuntMgr.TeleportToFinalLocation(player, locationId, message);
+        handler->SendSysMessage(message);
         return true;
     }
 
@@ -1592,7 +1642,7 @@ private:
         }
 
         handler->SendSysMessage("Living World");
-        handler->SendSysMessage("Version: 0.6.4.11-dev");
+        handler->SendSysMessage("Version: 0.6.4.12-dev");
         handler->PSendSysMessage("Scheduler: {}", schedulerState);
         handler->PSendSysMessage("Debug: {}", livingWorldConfig.GetConfigValue<bool>(LwConfig::Debug) ? "enabled" : "disabled");
         handler->PSendSysMessage("Active runtimes: {}", sInvasionRuntimeMgr.GetActiveRuntimeCount());

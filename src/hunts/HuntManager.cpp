@@ -1784,6 +1784,88 @@ std::string HuntManager::BuildFinalLocationExport(std::string const& zoneFilter)
     return out.str();
 }
 
+bool HuntManager::SetFinalLocationLevels(uint32 locationId, uint8 minLevel, uint8 maxLevel, bool automatic, std::string& message)
+{
+    auto itr = std::find_if(_finalLocations.begin(), _finalLocations.end(),
+        [locationId](HuntFinalLocationDefinition const& location) { return location.Id == locationId; });
+    if (itr == _finalLocations.end())
+    {
+        message = "[LW Hunt] Final location " + std::to_string(locationId) + " does not exist.";
+        return false;
+    }
+
+    if (!automatic && (!minLevel || !maxLevel || minLevel > maxLevel || maxLevel > 80))
+    {
+        message = "[LW Hunt] Invalid level range. Use levels <id> <min 1-80> <max 1-80>, or levels <id> auto.";
+        return false;
+    }
+
+    if (automatic)
+    {
+        WorldDatabase.DirectExecute(
+            "UPDATE `lw_hunt_final_location` SET `min_level`=0,`max_level`=0 WHERE `id`={}", locationId);
+        itr->MinLevel = 0;
+        itr->MaxLevel = 0;
+        itr->AutoDerivedLevels = false;
+        AnalyzeFinalLocationLevels(*itr);
+
+        std::ostringstream out;
+        out << "[LW Hunt] Final location " << locationId << " returned to automatic level analysis."
+            << " Effective levels: " << static_cast<uint32>(itr->MinLevel) << '-' << static_cast<uint32>(itr->MaxLevel);
+        if (!itr->NearbyMobSamples)
+            out << " | NO_MOBS";
+        else if (itr->NearbyMobSamples < 8)
+            out << " | SPARSE (" << itr->NearbyMobSamples << " mobs)";
+        else if (!itr->LevelSelectionEligible)
+            out << " | OUTSIDE_ZONE (" << itr->NearbyMobSamples << " mobs)";
+        else
+            out << " | GOOD (" << itr->NearbyMobSamples << " mobs)";
+        message = out.str();
+        return true;
+    }
+
+    WorldDatabase.DirectExecute(
+        "UPDATE `lw_hunt_final_location` SET `min_level`={},`max_level`={} WHERE `id`={}",
+        static_cast<uint32>(minLevel), static_cast<uint32>(maxLevel), locationId);
+
+    itr->MinLevel = minLevel;
+    itr->MaxLevel = maxLevel;
+    itr->NearbyMobSamples = 0;
+    itr->AutoDerivedLevels = false;
+    itr->LevelSelectionEligible = true;
+
+    std::ostringstream out;
+    out << "[LW Hunt] Final location " << locationId << " now uses authored levels "
+        << static_cast<uint32>(minLevel) << '-' << static_cast<uint32>(maxLevel) << '.';
+    message = out.str();
+    return true;
+}
+
+bool HuntManager::TeleportToFinalLocation(Player* player, uint32 locationId, std::string& message) const
+{
+    if (!player)
+    {
+        message = "[LW Hunt] This command must be used in game.";
+        return false;
+    }
+
+    HuntFinalLocationDefinition const* location = GetFinalLocation(locationId);
+    if (!location)
+    {
+        message = "[LW Hunt] Final location " + std::to_string(locationId) + " does not exist.";
+        return false;
+    }
+
+    player->TeleportTo(location->MapId, location->X, location->Y, location->Z, location->Orientation);
+
+    std::ostringstream out;
+    out << "[LW Hunt] Teleporting to final location " << locationId
+        << " (zone " << location->ZoneId << ", map " << location->MapId << ")"
+        << " at " << location->X << ", " << location->Y << ", " << location->Z << '.';
+    message = out.str();
+    return true;
+}
+
 bool HuntManager::DeleteFinalLocation(uint32 locationId, std::string& message)
 {
     QueryResult result = WorldDatabase.Query(
