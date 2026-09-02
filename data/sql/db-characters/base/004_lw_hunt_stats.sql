@@ -9,6 +9,9 @@ CREATE TABLE IF NOT EXISTS `lw_hunt_stats` (
   `greens_received` INT UNSIGNED NOT NULL DEFAULT 0,
   `blues_received` INT UNSIGNED NOT NULL DEFAULT 0,
   `epics_received` INT UNSIGNED NOT NULL DEFAULT 0,
+  `elite_total_completed` INT UNSIGNED NOT NULL DEFAULT 0,
+  `elite_daily_completed` INT UNSIGNED NOT NULL DEFAULT 0,
+  `elite_daily_reset_date` DATE NULL,
   `last_completed_at` TIMESTAMP NULL DEFAULT NULL,
   PRIMARY KEY (`guid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -41,6 +41,12 @@ struct HuntPreyAbilityDefinition
     uint32 CooldownMaxMs = 10000;
     uint8 ChancePct = 100;
     uint8 EncounterMask = 3; // 1=ambush, 2=final, 3=both
+    uint8 MinHunterLevel = 1;
+    uint8 MaxHunterLevel = 80;
+    uint8 HealthBelowPct = 0; // 0=ignore
+    bool RequireMelee = false;
+    bool OncePerEncounter = false;
+    bool RequireAuraMissing = false;
     bool Enabled = false;
 };
 
@@ -56,6 +62,7 @@ struct HuntDefinition
     float AmbushHealthMultiplier = 4.0f;
     float FinalHealthMultiplier = 6.0f;
     float RewardMultiplier = 1.0f;
+    uint8 Tier = 1; // 1=normal, 2=elite
     uint8 EscapeHealthPct = 50;
     uint8 AmbushCount = 2;
     bool Enabled = false;
@@ -144,6 +151,9 @@ public:
     HuntDefinition const* GetDefinition(uint32 preyId) const;
 
     bool RequestHunt(Player* player, Creature* giver, std::string& message);
+    bool RequestEliteHunt(Player* player, Creature* giver, std::string& message);
+    bool IsEliteUnlocked(Player const* player) const;
+    bool IsEliteAvailableToday(Player const* player) const;
     bool AbandonHunt(Player* player, std::string& message);
     bool TurnInHunt(Player* player, Creature* giver, std::string& message);
     void OnCreatureKill(Player* player, Creature* killed);
@@ -202,6 +212,7 @@ private:
     std::unordered_map<uint32, HuntDefinition> _hunts;
     std::unordered_map<uint32, std::vector<HuntPreyAbilityDefinition>> _preyAbilities;
     std::unordered_map<uint32, std::unordered_map<uint32, uint32>> _abilityTimers;
+    std::unordered_map<uint32, std::unordered_map<uint32, bool>> _abilityUsed;
     std::vector<HuntZoneDefinition> _zones;
     std::vector<HuntFinalLocationDefinition> _finalLocations;
     std::unordered_map<uint32, uint32> _giverEntries;

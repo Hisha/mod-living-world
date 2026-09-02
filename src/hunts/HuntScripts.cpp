@@ -19,6 +19,7 @@ enum HuntGossipAction : uint32
     ACTION_TURN_IN_HUNT = GOSSIP_ACTION_INFO_DEF + 3,
     ACTION_ABANDON_HUNT = GOSSIP_ACTION_INFO_DEF + 4,
     ACTION_HUNT_STATS = GOSSIP_ACTION_INFO_DEF + 5,
+    ACTION_REQUEST_ELITE_HUNT = GOSSIP_ACTION_INFO_DEF + 6,
     ACTION_GUARD_HUNTMASTER = GOSSIP_ACTION_INFO_DEF + 700
 };
 
@@ -36,6 +37,13 @@ public:
         if (!runtime)
         {
             AddGossipItemFor(player, GOSSIP_ICON_CHAT, "I seek dangerous prey.", GOSSIP_SENDER_MAIN, ACTION_REQUEST_HUNT);
+            if (sHuntMgr.IsEliteUnlocked(player))
+            {
+                if (sHuntMgr.IsEliteAvailableToday(player))
+                    AddGossipItemFor(player, GOSSIP_ICON_CHAT, "I seek an Elite Hunt.", GOSSIP_SENDER_MAIN, ACTION_REQUEST_ELITE_HUNT);
+                else
+                    AddGossipItemFor(player, GOSSIP_ICON_CHAT, "I have completed today's Elite Hunt.", GOSSIP_SENDER_MAIN, ACTION_HUNT_STATS);
+            }
         }
         else if (runtime->State == lw::HuntState::ReadyToTurnIn)
         {
@@ -60,6 +68,9 @@ public:
         {
             case ACTION_REQUEST_HUNT:
                 sHuntMgr.RequestHunt(player, creature, message);
+                break;
+            case ACTION_REQUEST_ELITE_HUNT:
+                sHuntMgr.RequestEliteHunt(player, creature, message);
                 break;
             case ACTION_TURN_IN_HUNT:
                 sHuntMgr.TurnInHunt(player, creature, message);

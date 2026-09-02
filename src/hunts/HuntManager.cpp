@@ -452,6 +452,7 @@ void HuntManager::Reset()
     _hunts.clear();
     _preyAbilities.clear();
     _abilityTimers.clear();
+    _abilityUsed.clear();
     _zones.clear();
     _finalLocations.clear();
     _giverEntries.clear();
@@ -468,6 +469,7 @@ void HuntManager::LoadDefinitions()
     _hunts.clear();
     _preyAbilities.clear();
     _abilityTimers.clear();
+    _abilityUsed.clear();
     _zones.clear();
     _finalLocations.clear();
     _giverEntries.clear();
@@ -479,7 +481,7 @@ void HuntManager::LoadDefinitions()
         return;
 
     if (QueryResult result = WorldDatabase.Query(
-        "SELECT `id`,`name`,`min_level`,`max_level`,`prey_creature_entry`,`prey_lw_template_id`,`activation_gameobject_entry`,`ambush_health_multiplier`,`final_health_multiplier`,`reward_multiplier`,`escape_health_pct`,`ambush_count`,`enabled` FROM `lw_hunt_prey` WHERE `enabled`=1"))
+        "SELECT `id`,`name`,`min_level`,`max_level`,`prey_creature_entry`,`prey_lw_template_id`,`activation_gameobject_entry`,`ambush_health_multiplier`,`final_health_multiplier`,`reward_multiplier`,`tier`,`escape_health_pct`,`ambush_count`,`enabled` FROM `lw_hunt_prey` WHERE `enabled`=1"))
     {
         do
         {
@@ -487,14 +489,15 @@ void HuntManager::LoadDefinitions()
             HuntDefinition d;
             d.Id=f[0].Get<uint32>(); d.Name=f[1].Get<std::string>(); d.MinLevel=f[2].Get<uint8>(); d.MaxLevel=f[3].Get<uint8>();
             d.PreyCreatureEntry=f[4].Get<uint32>(); d.PreyLwTemplateId=f[5].Get<uint32>(); d.ActivationGameObjectEntry=f[6].Get<uint32>();
-            d.AmbushHealthMultiplier=f[7].Get<float>(); d.FinalHealthMultiplier=f[8].Get<float>(); d.RewardMultiplier=std::max(0.0f, f[9].Get<float>());
-            d.EscapeHealthPct=f[10].Get<uint8>(); d.AmbushCount=f[11].Get<uint8>(); d.Enabled=f[12].Get<uint8>()!=0;
+            d.AmbushHealthMultiplier=f[7].Get<float>(); d.FinalHealthMultiplier=f[8].Get<float>(); d.RewardMultiplier=std::max(0.0f, f[9].Get<float>()); d.Tier=f[10].Get<uint8>();
+            d.EscapeHealthPct=f[11].Get<uint8>(); d.AmbushCount=f[12].Get<uint8>(); d.Enabled=f[13].Get<uint8>()!=0;
             _hunts[d.Id]=d;
         } while (result->NextRow());
     }
 
     if (QueryResult result = WorldDatabase.Query(
-        "SELECT `id`,`prey_id`,`spell_id`,`target`,`initial_min_ms`,`initial_max_ms`,`cooldown_min_ms`,`cooldown_max_ms`,`chance_pct`,`encounter_mask`,`enabled` "
+        "SELECT `id`,`prey_id`,`spell_id`,`target`,`initial_min_ms`,`initial_max_ms`,`cooldown_min_ms`,`cooldown_max_ms`,`chance_pct`,`encounter_mask`,"
+        "`min_hunter_level`,`max_hunter_level`,`health_below_pct`,`require_melee`,`once_per_encounter`,`require_aura_missing`,`enabled` "
         "FROM `lw_hunt_prey_ability` WHERE `enabled`=1 ORDER BY `prey_id`,`id`"))
     {
         do
@@ -504,7 +507,10 @@ void HuntManager::LoadDefinitions()
             d.Id = f[0].Get<uint32>(); d.PreyId = f[1].Get<uint32>(); d.SpellId = f[2].Get<uint32>(); d.Target = f[3].Get<uint8>();
             d.InitialMinMs = f[4].Get<uint32>(); d.InitialMaxMs = f[5].Get<uint32>();
             d.CooldownMinMs = f[6].Get<uint32>(); d.CooldownMaxMs = f[7].Get<uint32>();
-            d.ChancePct = f[8].Get<uint8>(); d.EncounterMask = f[9].Get<uint8>(); d.Enabled = f[10].Get<uint8>() != 0;
+            d.ChancePct = f[8].Get<uint8>(); d.EncounterMask = f[9].Get<uint8>();
+            d.MinHunterLevel=f[10].Get<uint8>(); d.MaxHunterLevel=f[11].Get<uint8>(); d.HealthBelowPct=f[12].Get<uint8>();
+            d.RequireMelee=f[13].Get<uint8>()!=0; d.OncePerEncounter=f[14].Get<uint8>()!=0;
+            d.RequireAuraMissing=f[15].Get<uint8>()!=0; d.Enabled = f[16].Get<uint8>() != 0;
             _preyAbilities[d.PreyId].push_back(d);
         } while (result->NextRow());
     }
@@ -867,7 +873,7 @@ bool HuntManager::RequestHunt(Player* player, Creature* giver, std::string& mess
 
     std::vector<HuntDefinition const*> eligible;
     for(auto const& [id,h]:_hunts)
-        if(h.Enabled && player->GetLevel()>=h.MinLevel && player->GetLevel()<=h.MaxLevel)
+        if(h.Enabled && h.Tier == 1 && player->GetLevel()>=h.MinLevel && player->GetLevel()<=h.MaxLevel)
             eligible.push_back(&h);
     if(eligible.empty()){message="I have no suitable prey for you right now.";return false;}
 
@@ -881,6 +887,57 @@ bool HuntManager::RequestHunt(Player* player, Creature* giver, std::string& mess
     HuntRuntime r; r.CharacterGuid=player->GetGUID().GetCounter(); r.PreyId=hunt.Id; r.GiverEntry=giver->GetEntry(); r.GiverSpawnId=giver->GetSpawnId(); r.ZoneId=zone->ZoneId; r.State=HuntState::Tracking;
     _runtimes[r.CharacterGuid]=r; SaveRuntime(r);
     message="Your quarry is "+hunt.Name+". Travel to "+zone->Name+" and hunt normally; signs of your prey will reveal themselves.";
+    return true;
+}
+
+bool HuntManager::IsEliteUnlocked(Player const* player) const
+{
+    if (!player)
+        return false;
+    if (QueryResult q = CharacterDatabase.Query(
+        "SELECT `total_completed` FROM `lw_hunt_stats` WHERE `guid`={}", player->GetGUID().GetCounter()))
+        return q->Fetch()[0].Get<uint32>() >= 10;
+    return false;
+}
+
+bool HuntManager::IsEliteAvailableToday(Player const* player) const
+{
+    if (!player)
+        return false;
+    if (QueryResult q = CharacterDatabase.Query(
+        "SELECT IF(`elite_daily_reset_date`=CURRENT_DATE(),`elite_daily_completed`,0) "
+        "FROM `lw_hunt_stats` WHERE `guid`={}", player->GetGUID().GetCounter()))
+        return q->Fetch()[0].Get<uint32>() == 0;
+    return true;
+}
+
+bool HuntManager::RequestEliteHunt(Player* player, Creature* giver, std::string& message)
+{
+    if(!_enabled){message="The Hunt system is disabled.";return false;}
+    if(!player||!giver||!IsHuntGiver(giver->GetEntry())){message="That creature is not a Living World Huntmaster.";return false;}
+    if(player->GetLevel()<_minimumLevel){message="You are not yet ready for an Elite Hunt.";return false;}
+    if(HasActiveHunt(player)){message="You already have an active hunt.";return false;}
+    if(!IsEliteUnlocked(player)){message="Elite Hunts unlock after 10 completed normal hunts.";return false;}
+    if(!IsEliteAvailableToday(player)){message="You have already completed an Elite Hunt today. Return tomorrow for another challenge.";return false;}
+
+    std::vector<HuntDefinition const*> eligible;
+    for(auto const& [id,h]:_hunts)
+        if(h.Enabled && h.Tier == 2 && player->GetLevel()>=h.MinLevel && player->GetLevel()<=h.MaxLevel)
+            eligible.push_back(&h);
+    if(eligible.empty()){message="I have no Elite prey suitable for you right now.";return false;}
+
+    auto giverIdIt=_giverEntries.find(giver->GetEntry());
+    auto giverDefIt=giverIdIt==_giverEntries.end()?_givers.end():_givers.find(giverIdIt->second);
+    if(giverDefIt==_givers.end()){message="This Huntmaster is not configured correctly.";return false;}
+    HuntZoneDefinition const* zone=SelectZone(player->GetLevel(),giverDefIt->second);
+    if(!zone){message="I have no suitable Elite hunting ground for your level.";return false;}
+
+    HuntDefinition const& hunt=*eligible[urand(0,static_cast<uint32>(eligible.size()-1))];
+    HuntRuntime r; r.CharacterGuid=player->GetGUID().GetCounter(); r.PreyId=hunt.Id; r.GiverEntry=giver->GetEntry();
+    r.GiverSpawnId=giver->GetSpawnId(); r.ZoneId=zone->ZoneId; r.State=HuntState::Tracking;
+    _runtimes[r.CharacterGuid]=r; SaveRuntime(r);
+    message="Elite quarry: "+hunt.Name+". Travel to "+zone->Name+
+        ". This prey is more dangerous than an ordinary Hunt target. At level 80, the final challenge is yours alone.";
     return true;
 }
 
@@ -903,6 +960,7 @@ bool HuntManager::TurnInHunt(Player* player, Creature* giver, std::string& messa
 
     HuntDefinition const* hunt = GetDefinition(r.PreyId);
     float rewardMultiplier = hunt ? hunt->RewardMultiplier : 1.0f;
+    bool const eliteHunt = hunt && hunt->Tier == 2;
 
     // Determine how many hunts were already completed today before this turn-in.
     // Reward quality deliberately diminishes across repeated same-day hunts.
@@ -934,7 +992,9 @@ bool HuntManager::TurnInHunt(Player* player, Creature* giver, std::string& messa
     // progressively suppress high-quality rewards without removing item rewards.
     uint32 qualityRoll = urand(1, 1000);
     uint32 desiredQuality = ITEM_QUALITY_UNCOMMON;
-    if (dailyCompletedBefore == 0)
+    if (eliteHunt)
+        desiredQuality = qualityRoll <= 100 ? ITEM_QUALITY_EPIC : ITEM_QUALITY_RARE; // 10% epic, otherwise guaranteed blue
+    else if (dailyCompletedBefore == 0)
         desiredQuality = qualityRoll <= 10 ? ITEM_QUALITY_EPIC : (qualityRoll <= 200 ? ITEM_QUALITY_RARE : ITEM_QUALITY_UNCOMMON);
     else if (dailyCompletedBefore == 1)
         desiredQuality = qualityRoll <= 5 ? ITEM_QUALITY_EPIC : (qualityRoll <= 120 ? ITEM_QUALITY_RARE : ITEM_QUALITY_UNCOMMON);
@@ -1030,14 +1090,20 @@ bool HuntManager::TurnInHunt(Player* player, Creature* giver, std::string& messa
     }
 
     std::ostringstream statsSql;
-    statsSql << "INSERT INTO `lw_hunt_stats` (`guid`,`total_completed`,`daily_completed`,`daily_reset_date`,`greens_received`,`blues_received`,`epics_received`,`last_completed_at`) "
+    statsSql << "INSERT INTO `lw_hunt_stats` (`guid`,`total_completed`,`daily_completed`,`daily_reset_date`,`greens_received`,`blues_received`,`epics_received`,`elite_total_completed`,`elite_daily_completed`,`elite_daily_reset_date`,`last_completed_at`) "
              << "VALUES (" << r.CharacterGuid << ",1,1,CURRENT_DATE(),"
              << (qualityColumn && std::string(qualityColumn)=="greens_received" ? 1 : 0) << ","
              << (qualityColumn && std::string(qualityColumn)=="blues_received" ? 1 : 0) << ","
-             << (qualityColumn && std::string(qualityColumn)=="epics_received" ? 1 : 0) << ",CURRENT_TIMESTAMP()) "
+             << (qualityColumn && std::string(qualityColumn)=="epics_received" ? 1 : 0) << ","
+             << (eliteHunt ? 1 : 0) << "," << (eliteHunt ? 1 : 0) << ","
+             << (eliteHunt ? "CURRENT_DATE()" : "NULL") << ",CURRENT_TIMESTAMP()) "
              << "ON DUPLICATE KEY UPDATE `total_completed`=`total_completed`+1, "
              << "`daily_completed`=IF(`daily_reset_date`=CURRENT_DATE(),`daily_completed`+1,1), "
              << "`daily_reset_date`=CURRENT_DATE(),";
+    if (eliteHunt)
+        statsSql << "`elite_total_completed`=`elite_total_completed`+1,"
+                 << "`elite_daily_completed`=IF(`elite_daily_reset_date`=CURRENT_DATE(),`elite_daily_completed`+1,1),"
+                 << "`elite_daily_reset_date`=CURRENT_DATE(),";
     if (qualityColumn)
         statsSql << "`" << qualityColumn << "`=`" << qualityColumn << "`+1,";
     statsSql << "`last_completed_at`=CURRENT_TIMESTAMP()";
@@ -1110,7 +1176,10 @@ void HuntManager::OnCreatureKill(Player* player, Creature* killed)
         bool ownerEligible = false;
         if (owner)
         {
-            bool sameGroup = owner->GetGroup() && player->GetGroup() && owner->GetGroup() == player->GetGroup();
+            HuntDefinition const* ownerHunt = GetDefinition(ownerRuntime.PreyId);
+            bool const maxLevelElite = ownerHunt && ownerHunt->Tier == 2 &&
+                owner->GetLevel() >= sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL);
+            bool sameGroup = !maxLevelElite && owner->GetGroup() && player->GetGroup() && owner->GetGroup() == player->GetGroup();
             ownerEligible = (owner == player) || sameGroup || killed->isTappedBy(owner);
         }
 
@@ -1134,6 +1203,11 @@ void HuntManager::OnCreatureKill(Player* player, Creature* killed)
                     continue;
 
                 bool isOwner = guid == ownerRuntime.CharacterGuid;
+                HuntDefinition const* creditedHunt = GetDefinition(runtime.PreyId);
+                bool const soloElite = creditedHunt && creditedHunt->Tier == 2 &&
+                    owner->GetLevel() >= sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL);
+                if (soloElite && !isOwner)
+                    continue;
                 bool groupedWithOwner = creditedGroup && hunter->GetGroup() == creditedGroup;
                 bool tapped = killed->isTappedBy(hunter);
                 if (!isOwner && !groupedWithOwner && !tapped)
@@ -2142,6 +2216,7 @@ bool HuntManager::SpawnPrey(Player* player, HuntRuntime& r, bool finalEncounter,
 
 void HuntManager::InitializeAbilityTimers(HuntRuntime const& runtime, bool finalEncounter)
 {
+    _abilityUsed.erase(runtime.CharacterGuid);
     auto& timers = _abilityTimers[runtime.CharacterGuid];
     timers.clear();
 
@@ -2184,6 +2259,18 @@ void HuntManager::UpdatePreyAbilities(Player* player, HuntRuntime& runtime, Crea
     {
         if (!ability.Enabled || !(ability.EncounterMask & encounterBit) || !ability.SpellId)
             continue;
+        uint8 const hunterLevel = player->GetLevel();
+        if (hunterLevel < ability.MinHunterLevel || hunterLevel > ability.MaxHunterLevel)
+            continue;
+        if (ability.OncePerEncounter && _abilityUsed[runtime.CharacterGuid][ability.Id])
+            continue;
+        if (ability.HealthBelowPct && prey->GetHealthPct() > ability.HealthBelowPct)
+            continue;
+        if (ability.RequireMelee && !prey->IsWithinMeleeRange(player))
+            continue;
+        Unit* target = ability.Target == 1 ? static_cast<Unit*>(prey) : static_cast<Unit*>(player);
+        if (ability.RequireAuraMissing && target->HasAura(ability.SpellId))
+            continue;
 
         uint32& timer = timerOwner->second[ability.Id];
         if (timer > elapsedMs)
@@ -2194,8 +2281,9 @@ void HuntManager::UpdatePreyAbilities(Player* player, HuntRuntime& runtime, Crea
 
         if (ability.ChancePct >= 100 || urand(1, 100) <= ability.ChancePct)
         {
-            Unit* target = ability.Target == 1 ? static_cast<Unit*>(prey) : static_cast<Unit*>(player);
             prey->CastSpell(target, ability.SpellId, false);
+            if (ability.OncePerEncounter)
+                _abilityUsed[runtime.CharacterGuid][ability.Id] = true;
         }
 
         uint32 const minMs = std::min(ability.CooldownMinMs, ability.CooldownMaxMs);
