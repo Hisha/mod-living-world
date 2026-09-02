@@ -34,20 +34,3 @@ LivingWorld.Scheduler.MaxActive.ResponseOrigin.2 = 1
 #
 LivingWorld.Travel.StartHour = 6
 LivingWorld.Travel.EndHour = 18
-# ---------------------------------------------------------------------------
-# Hunts / Prey
-# ---------------------------------------------------------------------------
-LivingWorld.Hunts.Enable = 1
-LivingWorld.Hunts.MinimumLevel = 10
-
-# Geographic range used when a Huntmaster chooses level-appropriate hunting grounds.
-# 0 = Local Region: only zones explicitly mapped to that Huntmaster.
-# 1 = Continent: anywhere on the Huntmaster's logical continent.
-# 2 = World: any enabled level-appropriate hunt zone.
-# Local regions are data-driven in 906_hunt_local_regions.sql and may overlap.
-LivingWorld.Hunts.SearchScope = 0
-
-# Multiplier applied to level-appropriate Hunt completion XP.
-# Hunt rewards are active: XP, level-scaled gold, and an existing Blizzard item.
-# 0.0 = no Hunt completion XP, 0.75 = 75%, 1.0 = full baseline, 1.5 = 150%.
-LivingWorld.Hunts.XPMultiplier = 0.75
